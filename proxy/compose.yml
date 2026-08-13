@@ -1,0 +1,25 @@
+services:
+  caddy:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    environment:
+      - CADDY_INGRESS_NETWORKS=proxy
+      - CADDY_DOCKER_CADDYFILE_PATH=/etc/caddy/Caddyfile
+    networks:
+      - proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - data:/data
+      - config:/config
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  data:
+  config:

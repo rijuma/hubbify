@@ -1,0 +1,6 @@
+# Base Caddyfile (local).
+#
+# caddy-docker-proxy merges this file with the config it generates from
+# container labels. Per-project routing lives in each project's two labels;
+# this file is the escape hatch for anything more complex (extra directives,
+# snippets, odd sites). Keep it empty unless something truly needs it.

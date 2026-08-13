@@ -1,0 +1,4 @@
+.env
+servers/*
+!servers/_template
+node_modules/

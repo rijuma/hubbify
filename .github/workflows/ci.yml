@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: extractions/setup-just@v4
+
+      - name: Validate compose files
+        env:
+          CLOUDFLARE_API_TOKEN: dummy
+        run: |
+          docker compose -f proxy/compose.yml config -q
+          docker compose -f proxy/compose.yml -f proxy/compose.remote.yml config -q
+
+      - name: Start proxy and a labeled test container
+        run: |
+          just up
+          docker run -d --network proxy \
+            --label caddy=whoami.localhost \
+            --label 'caddy.reverse_proxy={{upstreams 80}}' \
+            traefik/whoami
+
+      - name: Smoke test — whoami reachable over HTTPS via the proxy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsk --resolve whoami.localhost:443:127.0.0.1 https://whoami.localhost >/dev/null; then
+              echo "Proxy is routing whoami over HTTPS."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Smoke test failed; proxy logs:"
+          docker compose -f proxy/compose.yml logs caddy
+          exit 1

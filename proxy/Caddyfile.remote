@@ -1,0 +1,12 @@
+# Base Caddyfile (remote).
+#
+# caddy-docker-proxy merges this file with the config it generates from
+# container labels. Per-project routing lives in each project's two labels;
+# this file is the escape hatch for anything more complex.
+{
+	email {$ACME_EMAIL}
+
+	# All certificates via DNS-01 against Cloudflare, so sites work even
+	# behind the orange cloud and before DNS propagates.
+	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+}
