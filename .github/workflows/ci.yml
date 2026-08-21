@@ -20,6 +20,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: dummy
           ACME_EMAIL: dummy@example.com
+          SERVER_NAME: dummy
         run: |
           docker compose -f proxy/compose.yml config -q
           docker compose -f proxy/compose.yml -f proxy/compose.remote.yml config -q
