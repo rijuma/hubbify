@@ -129,16 +129,20 @@ definition (`up` from files) — definition changes go through git.
 
 Hubbify only deploys the proxy: `just remote-up <server>`. Projects deploy
 from their own repos — the canonical path is the manual-dispatch GitHub
-workflow shipped by hubbify-template, using a `production` environment: an
-SSH deploy key + pinned host key create the context, and the environment's
-`ENV_FILE` secret is written to `infra/.env.remote` on the runner —
-production secrets live in GitHub, never on a laptop or in hubbify. The
-upgrade path for bigger projects is GitHub Actions building images to GHCR,
-with the same compose-over-context deploy pulling instead of building.
+workflow shipped by hubbify-template, with one GitHub environment per env
+folder (`envs/<env>/`): an SSH deploy key + pinned host key create the
+docker context the env's `server.conf` declares, and the environment's
+`ENV_FILE` secret is written to `envs/<env>/.env` on the runner —
+production secrets live in GitHub, never on a laptop or in hubbify. Before
+`up`, the deploy checks the server's `hubbify.server` stamp against the
+env's `SERVER_NAME` (see the project contract), so a context pointing at
+the wrong machine aborts. The upgrade path for bigger projects is GitHub
+Actions building images to GHCR, with the same compose-over-context deploy
+pulling instead of building.
 
-The manual escape hatch for a project without CI is running the same compose
-command from the project directory with a local `.env.remote`; hubbify does
-not manage project config.
+The manual escape hatch for a project without CI is running the same
+`just deploy <env>` from the project directory with a local
+`envs/<env>/.env`; hubbify does not manage project config.
 
 ## DNS (planned)
 

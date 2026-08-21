@@ -1,11 +1,14 @@
 # Remote overlay: compose -f compose.yml -f compose.remote.yml
 # Only the differences from the local stack: the Cloudflare token for DNS-01,
-# the ACME account email, and switching to the remote base Caddyfile (both
+# the ACME account email, switching to the remote base Caddyfile (both
 # files are baked into the image; this just selects which one
-# caddy-docker-proxy loads).
+# caddy-docker-proxy loads), and the server identity stamp that project
+# deploys verify before touching the server (see docs/project-contract.md).
 services:
   caddy:
     environment:
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:?set it in servers/<name>/server.env}
       - ACME_EMAIL=${ACME_EMAIL:?set it in servers/<name>/server.env}
       - CADDY_DOCKER_CADDYFILE_PATH=/etc/caddy/Caddyfile.remote
+    labels:
+      hubbify.server: ${SERVER_NAME:?set it in servers/<name>/server.env}
