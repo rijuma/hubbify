@@ -55,17 +55,85 @@ cleanup server:
     echo "== Disk after =="
     ssh {{server}} "df -h /"
 
-# Update a server: install OS updates, then rebuild + redeploy the proxy
+# Update a server: install OS updates, then rebuild + redeploy the proxy and refresh its firewall
 upgrade server:
     #!/usr/bin/env bash
     set -euo pipefail
     ssh {{server}} "sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get -yq upgrade"
     just remote-up {{server}}
+    just firewall {{server}}
     if ssh {{server}} "test -f /var/run/reboot-required"; then
         echo "Reboot required — run: just ssh {{server}} sudo reboot"
     else
         echo "No reboot required."
     fi
+
+# Restrict 80/443 to Cloudflare when server.env has CLOUDFLARE_ONLY=true, else lift it
+firewall server:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cloudflare_only=$(sed -n 's/^CLOUDFLARE_ONLY=//p' servers/{{server}}/server.env | tail -n 1)
+    case "$cloudflare_only" in
+        ''|true) ;;
+        *) echo "CLOUDFLARE_ONLY must be empty or true (got '$cloudflare_only')" >&2; exit 1 ;;
+    esac
+    strip_block='/^# BEGIN hubbify$/,/^# END hubbify$/d'
+
+    # ufw reload leaves an undeclared chain alone, so the live DOCKER-USER rules are
+    # flushed too (while opted in, every reload already resets that chain to the block).
+    if [ "$cloudflare_only" != "true" ]; then
+        removed=$(ssh {{server}} "set -e; for rules in after.rules:iptables after6.rules:ip6tables; do
+            f=/etc/ufw/\${rules%:*}
+            if sudo grep -qs '^# BEGIN hubbify\$' \$f; then
+                sudo sed -i '$strip_block' \$f; sudo \${rules#*:} -F DOCKER-USER; echo \$f
+            fi
+        done")
+        if [ -n "$removed" ]; then
+            ssh {{server}} "sudo ufw reload"
+        fi
+        exit 0
+    fi
+
+    fetch_ranges() {
+        local ranges
+        ranges=$(curl -fsS "https://www.cloudflare.com/$1")
+        if [ -z "$ranges" ] || grep -qvE '^[0-9a-f.:]+/[0-9]+$' <<<"$ranges"; then
+            echo "Unexpected Cloudflare $1 list" >&2
+            return 1
+        fi
+        echo "$ranges"
+    }
+
+    # --ctorigdstport matches the port before DNAT rewrote it; only DNATed (published-port)
+    # traffic is dropped, so the containers' own outbound connections keep working.
+    rules_block() {
+        echo '# BEGIN hubbify'
+        echo '*filter'
+        echo ':DOCKER-USER - [0:0]'
+        echo '-A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN'
+        for cidr in $1; do
+            for proto_port in tcp:80 tcp:443 udp:443; do
+                echo "-A DOCKER-USER -s $cidr -p ${proto_port%:*} -m conntrack --ctorigdstport ${proto_port#*:} -j RETURN"
+            done
+        done
+        for proto_port in tcp:80 tcp:443 udp:443; do
+            echo "-A DOCKER-USER -p ${proto_port%:*} -m conntrack --ctstate DNAT --ctorigdstport ${proto_port#*:} -j DROP"
+        done
+        echo 'COMMIT'
+        echo '# END hubbify'
+    }
+
+    write_block() {
+        ssh {{server}} "sudo sed -i '$strip_block' $1 && sudo tee -a $1 >/dev/null" <<<"$2"
+    }
+
+    ipv4_ranges=$(fetch_ranges ips-v4)
+    ipv6_ranges=$(fetch_ranges ips-v6)
+    ssh {{server}} "sudo ufw status | grep -q '^Status: active'" \
+        || { echo "ufw is not active on {{server}}; enable it first" >&2; exit 1; }
+    write_block /etc/ufw/after.rules "$(rules_block "$ipv4_ranges")"
+    write_block /etc/ufw/after6.rules "$(rules_block "$ipv6_ranges")"
+    ssh {{server}} "sudo ufw reload"
 
 # Create a server folder from the template, e.g. `just server-create myvps`
 server-create name:
