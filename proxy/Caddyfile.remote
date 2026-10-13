@@ -10,4 +10,11 @@
 	# All certificates via DNS-01 against Cloudflare, so sites work even
 	# behind the orange cloud and before DNS propagates.
 	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+
+	# Trust Cloudflare's ranges (refreshed by the module) so client_ip and
+	# access logs show the visitor from CF-Connecting-IP, not Cloudflare.
+	servers {
+		trusted_proxies cloudflare
+		client_ip_headers CF-Connecting-IP
+	}
 }

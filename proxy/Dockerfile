@@ -2,7 +2,8 @@ FROM caddy:2.11.2-builder AS builder
 
 RUN xcaddy build \
     --with github.com/lucaslorentz/caddy-docker-proxy/v2@v2.12.0 \
-    --with github.com/caddy-dns/cloudflare@v0.2.4
+    --with github.com/caddy-dns/cloudflare@v0.2.4 \
+    --with github.com/WeidiDeng/caddy-cloudflare-ip@f53b62aa13cb7ad79c8b47aacc3f2f03989b67e5
 
 # Optional per-server Caddyfile. compose.remote.yml replaces this empty stage
 # with the servers/<name>/caddy/ folder as an additional build context.
