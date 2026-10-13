@@ -69,9 +69,12 @@ with that site like any other base-Caddyfile block.
 
 Each project keeps its own compose default network for internal traffic
 (app ↔ db, etc.). Only the web-facing service additionally joins the external
-`proxy` network. Projects cannot see each other, and databases are never
-reachable from the proxy network. No project publishes ports; only the proxy
-binds 80/443.
+`proxy` network. A project's default network (databases, workers) is not
+reachable from other projects or from the proxy network. Web-facing services
+all share `proxy`, so they can reach each other there; a service on `proxy`
+reaches its own siblings only by project-unique names (rule 6 in
+[project-contract.md](project-contract.md)). No project publishes ports; only
+the proxy binds 80/443.
 
 ## Servers
 
