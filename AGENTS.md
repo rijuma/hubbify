@@ -29,7 +29,8 @@ disposability, CI parity) are in `docs/architecture.md` → Deploys.
   (gitignored) on the machine that runs the deploy — never committed, never
   stored on the server outside the proxy container's env. Project production
   envs are GitHub environment secrets in each project's own repo; hubbify
-  holds no project config.
+  holds no project env or deploy config, only proxy-side site extras in
+  `servers/<name>/caddy/Caddyfile`.
 
 ## Conventions
 

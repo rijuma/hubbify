@@ -73,8 +73,10 @@ with that site like any other base-Caddyfile block.
   address. This holds on every remote server.
 - **Cloudflare-only origin (opt-in).** On servers with `CLOUDFLARE_ONLY=true`,
   `just firewall` drops inbound 80/443 (TCP, and UDP 443 for HTTP/3) from
-  anything outside Cloudflare's ranges, so nobody can skip Cloudflare by
-  hitting the origin IP. Closing 80 does not break renewal: DNS-01 needs no
+  anything outside Cloudflare's ranges. The origin IP is closed to everyone
+  but Cloudflare once `just firewall` has completed with the flag set, which
+  on a host with a global IPv6 address needs a `proxy` network with IPv6 (see
+  Server bootstrap). Closing 80 does not break renewal: DNS-01 needs no
   inbound challenge traffic. Servers that also host grey-cloud (DNS only)
   domains leave the flag empty and keep 80/443 open.
 
@@ -125,21 +127,24 @@ Day-to-day host maintenance is also a recipe away, always run from the
 client over SSH (the server name doubles as the SSH alias): `just ssh` for a
 shell, `just cleanup` to reclaim disk (docker prune, apt autoremove/clean,
 journal vacuum), `just upgrade` to install OS updates, rebuild + redeploy
-the proxy and refresh the firewall, reporting whether a reboot is pending.
-These assume the admin user the bootstrap creates (passwordless sudo).
+the proxy, report whether a reboot is pending and then refresh the firewall;
+it fails if `just firewall` refuses, after the reboot report. These assume
+the admin user the bootstrap creates (passwordless sudo).
 
 `just firewall <name>` applies `CLOUDFLARE_ONLY` from `server.env` (empty or
 missing means off; any value other than `true` aborts). When `true`, it
 fetches Cloudflare's IPv4 and IPv6 lists on the client, aborts if ufw is not
-active on the server, writes a `# BEGIN hubbify` … `# END hubbify` block into
-`/etc/ufw/after.rules` and `/etc/ufw/after6.rules` (replacing the previous
-one) and reloads ufw. When off, it removes that block, flushes the live
-`DOCKER-USER` chain (a ufw reload alone would leave the rules until reboot)
-and reloads ufw, doing nothing if there was no block, so opting out is
-clearing the flag and rerunning. It touches no other rule, so SSH stays as
-configured, and it refuses to edit a rules file whose hubbify block is
-unterminated or repeated. Running it again yields the same files; `upgrade`
-calls it so Cloudflare's ranges stay current.
+active on the server or if the server has a global IPv6 address that Docker
+does not route through `DOCKER-USER` (see Server bootstrap), writes a
+`# BEGIN hubbify` … `# END hubbify` block into `/etc/ufw/after.rules` and
+`/etc/ufw/after6.rules` (replacing the previous one) and reloads ufw. When
+off, it removes that block, flushes the live `DOCKER-USER` chain (a ufw
+reload alone would leave the rules until reboot) and reloads ufw, doing
+nothing if there was no block, so opting out is clearing the flag and
+rerunning. It touches no other rule, so SSH stays as configured, and it
+refuses to edit a rules file whose hubbify block is unterminated or repeated.
+Running it again yields the same files; `upgrade` calls it so Cloudflare's
+ranges stay current.
 
 ## Deploys
 
@@ -192,7 +197,8 @@ pulling instead of building.
 
 The manual escape hatch for a project without CI is running the same
 `just deploy <env>` from the project directory with a local
-`envs/<env>/.env`; hubbify does not manage project config.
+`envs/<env>/.env`; hubbify holds no project env or deploy config, only
+proxy-side site extras in `servers/<name>/caddy/Caddyfile`.
 
 ## DNS (planned)
 
@@ -219,6 +225,26 @@ chain instead of appending duplicates. It returns established/related traffic
 first, then traffic from Cloudflare's ranges, and drops only DNATed
 (published-port) connections whose original destination port is 80 or 443, so
 the containers' own outbound traffic keeps working.
+
+The IPv6 block only sees IPv6 traffic when Docker routes it through
+`DOCKER-USER`, which needs both Docker's ip6tables support (on unless
+`/etc/docker/daemon.json` sets `"ip6tables": false`) and a `proxy` network
+created with `--ipv6`. Otherwise Docker's userland docker-proxy carries
+published IPv6 traffic, which then passes ufw's `INPUT` (where 80/443 are
+allowed) and never reaches `DOCKER-USER`. So on a `CLOUDFLARE_ONLY` server
+with a global IPv6 address (ULA `fd00::/8` addresses do not count),
+`just firewall` checks both and aborts unless they hold. The way out is to
+recreate the `proxy` network with IPv6:
+
+1. Take the proxy (project `proxy`) and every project down with
+   `docker --context <name> compose -p <project> down`, which removes their
+   containers; `docker network rm proxy` fails while any is attached.
+2. `docker --context <name> network rm proxy`
+3. `docker --context <name> network create --ipv6 proxy`, adding
+   `--subnet <ipv6-cidr>` if the daemon has no default IPv6 pool.
+4. `just remote-up <name>`, which keeps the existing `proxy` network.
+5. Redeploy the projects.
+6. `just firewall <name>`
 
 ## Repository layout
 

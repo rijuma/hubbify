@@ -78,10 +78,14 @@ this contract out of the box.
 Remote traffic arrives through Cloudflare, which sets `CF-Connecting-IP` to
 the visitor's address; the proxy passes the header through, so projects read
 the visitor IP from `CF-Connecting-IP` with no extra labels. Trust it only on
-servers with `CLOUDFLARE_ONLY=true` in their `server.env`: there the firewall
-lets only Cloudflare reach the origin, and Cloudflare always overwrites the
-header. On other servers anyone who finds the origin IP can send the header
-with any value, so per-IP rate limits and logs keyed on it can be fooled.
+servers where `just firewall` has completed with `CLOUDFLARE_ONLY=true`: there
+the firewall lets only Cloudflare reach the origin, and Cloudflare always
+overwrites the header. The flag alone proves nothing: if `just firewall`
+refused, the origin is not Cloudflare-only. On a host with a global IPv6
+address this requires the `proxy` network to have IPv6 enabled, since
+otherwise `just firewall` refuses to apply. On other servers anyone who finds
+the origin IP can send the header with any value, so per-IP rate limits and
+logs keyed on it can be fooled.
 
 ## Full example
 
