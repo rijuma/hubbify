@@ -19,9 +19,9 @@ disposability, CI parity) are in `docs/architecture.md` → Deploys.
 
 - **Two labels per project, never more.** Routing is declared only as
   `caddy: <domain>` + `caddy.reverse_proxy: '{{upstreams <port>}}'`
-  (see `docs/project-contract.md`). Anything fancier goes in the proxy's base
-  Caddyfile (`proxy/Caddyfile.remote`), written as plain Caddyfile — never as
-  `caddy.*` label trees.
+  (see `docs/project-contract.md`). Anything fancier goes in the hosting
+  server's `servers/<name>/caddy/Caddyfile`, written as plain Caddyfile —
+  never as `caddy.*` label trees.
 - **Isolation:** only web-facing services join the external `proxy` network;
   databases/workers stay on the project default network. No project publishes
   host ports.

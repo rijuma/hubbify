@@ -38,8 +38,10 @@ this contract out of the box.
 
 3. **No other `caddy.*` labels.** If a project needs more than
    domain + port (extra headers, auth, redirects), that config goes into the
-   proxy's base Caddyfile (`proxy/Caddyfile.remote`), written as plain
-   Caddyfile — never as label trees.
+   hosting server's `servers/<name>/caddy/Caddyfile` in hubbify, written as
+   plain Caddyfile — never as label trees. A block for the project's domain
+   there is merged with the site its labels generate, and only that server
+   serves it.
 
 4. **Do not publish ports.** The proxy reaches the app over the `proxy`
    network; only the proxy binds 80/443 on the host.
@@ -54,6 +56,22 @@ this contract out of the box.
    deploying-to-the-wrong-server fail closed: unknown env names error out,
    the context is repo-declared data rather than a CLI argument, and a
    context pointing at the wrong machine is caught before `up`.
+
+6. **Reach siblings by project-unique names.** Docker gives every container
+   its service name as an alias on every network it joins, so on the shared
+   `proxy` network a generic name like `web` or `api` resolves to other
+   projects' containers too. A service on `proxy` that calls a sibling (e.g. a
+   gateway proxying to the app) must use a project-unique network alias on the
+   project's default network, such as `myapp-api`:
+
+   ```yaml
+   services:
+     api:
+       networks:
+         default:
+           aliases:
+             - myapp-api
+   ```
 
 ## Full example
 

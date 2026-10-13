@@ -41,6 +41,16 @@ merges with the generated config:
 
 - `proxy/Caddyfile` — local base (empty; escape hatch only).
 - `proxy/Caddyfile.remote` — remote base (ACME email + `acme_dns cloudflare`).
+- `servers/<name>/caddy/Caddyfile` — optional per-server extras (auth,
+  headers, redirects for the sites that server hosts), as plain Caddyfile.
+
+The base Caddyfiles are baked into the proxy image. On `just remote-up`,
+`proxy/compose.remote.yml` passes `servers/<name>/caddy/` as an extra build
+context, and `proxy/Dockerfile` appends its `Caddyfile`, when present, to the
+end of `Caddyfile.remote`; without one the remote base is used as is. The
+blocks are appended inline rather than imported because caddy-docker-proxy
+does not expand `import`, and a block for a label-generated domain is merged
+with that site like any other base-Caddyfile block.
 
 ## TLS
 
@@ -72,7 +82,16 @@ context, and its folder in this repo:
 ```
 servers/<name>/
   server.env            server-level secrets: CLOUDFLARE_API_TOKEN (gitignored)
+  caddy/Caddyfile       optional per-server Caddyfile (gitignored)
 ```
+
+The `caddy/` subfolder holds only the Caddyfile because the docker build
+uploads a whole build-context folder to the server's daemon, so pointing it at
+`servers/<name>/` would ship `server.env` to the server and keep it in the
+build cache. `remote-up` creates the folder if it is missing. `SERVER_NAME` in
+`server.env` must equal the `servers/<name>/` folder name: `remote-up` picks
+the env file by the context (folder) name, while the build context path comes
+from `SERVER_NAME`.
 
 Server folders are created with `just server-create <name>`, which copies
 `servers/_template/` (the only tracked entry under `servers/`; everything else
@@ -80,7 +99,8 @@ is gitignored local state), and deleted with `just server-remove <name>` after
 confirmation.
 
 A server folder exists only to install and update hubbify itself (the proxy
-stack) on that server. Nothing project-related lives here: each project's
+stack) on that server. Beyond the proxy-side site extras in
+`caddy/Caddyfile`, nothing project-related lives here: each project's
 production config belongs to the project's own repo, as GitHub environment
 secrets used by its deploy workflow.
 
@@ -163,7 +183,7 @@ proxy can be started on any docker host with the `just` recipes.
 ```
 justfile              task entry points (just --list)
 proxy/                the reverse proxy stack (local + remote overlay)
-servers/<name>/       per-server secrets (server.env)
+servers/<name>/       per-server secrets (server.env) and caddy/Caddyfile
 servers/_template/    tracked skeleton copied by `just server-create`
 docs/                 you are here
 ```
