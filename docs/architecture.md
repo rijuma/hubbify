@@ -27,12 +27,14 @@ config language and no generation step.
 ## Reverse proxy
 
 The proxy is [lucaslorentz/caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy):
-Caddy custom-built (see `proxy/Dockerfile`) with two modules:
+Caddy custom-built (see `proxy/Dockerfile`) with three modules:
 
 - **caddy-docker-proxy** — watches the docker socket, builds a Caddyfile in
   memory from container labels, and hot-reloads Caddy when containers change.
 - **caddy-dns/cloudflare** — solves ACME DNS-01 challenges against Cloudflare
   (remote only).
+- **caddy-cloudflare-ip** — provides Cloudflare's IP ranges, refreshed by the
+  module, as a `trusted_proxies` source (remote only).
 
 Projects declare their routing with exactly two labels (see
 [project-contract.md](project-contract.md)); nothing else is allowed in labels.
@@ -64,6 +66,17 @@ with that site like any other base-Caddyfile block.
   real certificates, and it redirects port 80 to HTTPS — under "Flexible"
   Cloudflare fetches the origin over plain HTTP, which loops on that
   redirect (endless 308s).
+- **Caddy sees the visitor, not Cloudflare.** `proxy/Caddyfile.remote` sets
+  `trusted_proxies cloudflare` and `client_ip_headers CF-Connecting-IP`, so
+  `{client_ip}` and access logs show the visitor for requests that arrive
+  from Cloudflare's ranges; requests from any other peer keep the peer's
+  address. This holds on every remote server.
+- **Cloudflare-only origin (opt-in).** On servers with `CLOUDFLARE_ONLY=true`,
+  `just firewall` drops inbound 80/443 (TCP, and UDP 443 for HTTP/3) from
+  anything outside Cloudflare's ranges, so nobody can skip Cloudflare by
+  hitting the origin IP. Closing 80 does not break renewal: DNS-01 needs no
+  inbound challenge traffic. Servers that also host grey-cloud (DNS only)
+  domains leave the flag empty and keep 80/443 open.
 
 ## Isolation
 
@@ -84,7 +97,8 @@ context, and its folder in this repo:
 
 ```
 servers/<name>/
-  server.env            server-level secrets: CLOUDFLARE_API_TOKEN (gitignored)
+  server.env            server secrets and settings: CLOUDFLARE_API_TOKEN,
+                        CLOUDFLARE_ONLY (gitignored)
   caddy/Caddyfile       optional per-server Caddyfile (gitignored)
 ```
 
@@ -110,9 +124,22 @@ secrets used by its deploy workflow.
 Day-to-day host maintenance is also a recipe away, always run from the
 client over SSH (the server name doubles as the SSH alias): `just ssh` for a
 shell, `just cleanup` to reclaim disk (docker prune, apt autoremove/clean,
-journal vacuum), `just upgrade` to install OS updates and rebuild + redeploy
-the proxy, reporting whether a reboot is pending. These assume the admin user
-the bootstrap creates (passwordless sudo).
+journal vacuum), `just upgrade` to install OS updates, rebuild + redeploy
+the proxy and refresh the firewall, reporting whether a reboot is pending.
+These assume the admin user the bootstrap creates (passwordless sudo).
+
+`just firewall <name>` applies `CLOUDFLARE_ONLY` from `server.env` (empty or
+missing means off; any value other than `true` aborts). When `true`, it
+fetches Cloudflare's IPv4 and IPv6 lists on the client, aborts if ufw is not
+active on the server, writes a `# BEGIN hubbify` … `# END hubbify` block into
+`/etc/ufw/after.rules` and `/etc/ufw/after6.rules` (replacing the previous
+one) and reloads ufw. When off, it removes that block, flushes the live
+`DOCKER-USER` chain (a ufw reload alone would leave the rules until reboot)
+and reloads ufw, doing nothing if there was no block, so opting out is
+clearing the flag and rerunning. It touches no other rule, so SSH stays as
+configured, and it refuses to edit a rules file whose hubbify block is
+unterminated or repeated. Running it again yields the same files; `upgrade`
+calls it so Cloudflare's ranges stay current.
 
 ## Deploys
 
@@ -180,6 +207,18 @@ deletes are unsafe).
 An idempotent script prepares a fresh VPS: SSH hardening, ufw (ssh/80/443),
 docker install, the `proxy` network, and the proxy stack. Until it exists, the
 proxy can be started on any docker host with the `just` recipes.
+
+ufw must be active before `just firewall` runs on a `CLOUDFLARE_ONLY` server.
+ufw's own allow/deny rules do not cover the proxy's 80/443: Docker DNATs
+published-port traffic to the container in its own iptables rules, so it is
+forwarded past ufw's `INPUT` rules. The hubbify block therefore filters in
+Docker's `DOCKER-USER` chain, fed from ufw's `after.rules` and `after6.rules`,
+which ufw loads at boot. The block declares `DOCKER-USER` itself, because ufw
+starts before Docker creates the chain, and so each ufw reload resets the
+chain instead of appending duplicates. It returns established/related traffic
+first, then traffic from Cloudflare's ranges, and drops only DNATed
+(published-port) connections whose original destination port is 80 or 443, so
+the containers' own outbound traffic keeps working.
 
 ## Repository layout
 
