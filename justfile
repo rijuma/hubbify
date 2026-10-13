@@ -61,12 +61,12 @@ upgrade server:
     set -euo pipefail
     ssh {{server}} "sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get -yq upgrade"
     just remote-up {{server}}
-    just firewall {{server}}
     if ssh {{server}} "test -f /var/run/reboot-required"; then
         echo "Reboot required — run: just ssh {{server}} sudo reboot"
     else
         echo "No reboot required."
     fi
+    just firewall {{server}}
 
 # Restrict 80/443 to Cloudflare when server.env has CLOUDFLARE_ONLY=true, else lift it
 firewall server:
@@ -140,6 +140,31 @@ firewall server:
     ipv6_ranges=$(fetch_ranges ips-v6)
     ssh {{server}} "sudo ufw status | grep -q '^Status: active'" \
         || { echo "ufw is not active on {{server}}; enable it first" >&2; exit 1; }
+    # Without Docker's ip6tables support and an IPv6 proxy network, docker-proxy carries
+    # published IPv6 traffic through ufw's INPUT, so the v6 block would never see it.
+    # ULA (fd00::/8) addresses are not reachable from the internet and do not count.
+    global_ipv6=$(ssh {{server}} "ip -6 -o addr show scope global" | awk '$4 !~ /^fd/ {print $4}')
+    if [ -n "$global_ipv6" ]; then
+        proxy_ipv6=$(ssh {{server}} "sudo ip6tables -t nat -nL DOCKER >/dev/null 2>&1 \
+            && docker network inspect proxy --format '{{{{.EnableIPv6}}' 2>/dev/null || true")
+        if [ "$proxy_ipv6" != "true" ]; then
+            {
+                echo "{{server}} has a global IPv6 address, but Docker does not route IPv6 through"
+                echo "DOCKER-USER, so the Cloudflare-only rules would not filter IPv6. That needs Docker's"
+                echo "ip6tables support (on unless /etc/docker/daemon.json sets \"ip6tables\": false) and"
+                echo "a proxy network with IPv6. To recreate the network:"
+                echo "  1. docker --context {{server}} compose -p <project> down, for the proxy (project"
+                echo "     'proxy') and every project, so no container is attached to the network"
+                echo "  2. docker --context {{server}} network rm proxy"
+                echo "  3. docker --context {{server}} network create --ipv6 proxy"
+                echo "     (add --subnet <ipv6-cidr> if the daemon has no default IPv6 pool)"
+                echo "  4. just remote-up {{server}}"
+                echo "  5. redeploy the projects"
+                echo "  6. just firewall {{server}}"
+            } >&2
+            exit 1
+        fi
+    fi
     write_block /etc/ufw/after.rules "$(rules_block "$ipv4_ranges")"
     write_block /etc/ufw/after6.rules "$(rules_block "$ipv6_ranges")"
     ssh {{server}} "sudo ufw reload"

@@ -8,5 +8,6 @@ Cloudflare's IP ranges on servers with `CLOUDFLARE_ONLY=true` in their
 `DOCKER-USER`), lifts the restriction when the flag is cleared, and runs from
 `just upgrade` to keep the ranges current. The remote proxy trusts Cloudflare's
 ranges and reads the client IP from `CF-Connecting-IP`, and the project
-contract documents that header as the visitor IP, trustworthy only on
-`CLOUDFLARE_ONLY` servers.
+contract documents that header as the visitor IP, trustworthy only once
+`just firewall` has completed with `CLOUDFLARE_ONLY=true`, which on a host with
+a global IPv6 address needs a `proxy` network with IPv6.
