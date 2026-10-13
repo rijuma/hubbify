@@ -78,6 +78,13 @@ firewall server:
         *) echo "CLOUDFLARE_ONLY must be empty or true (got '$cloudflare_only')" >&2; exit 1 ;;
     esac
     strip_block='/^# BEGIN hubbify$/,/^# END hubbify$/d'
+    # Runs on the server before every strip_block: a BEGIN without its END would make the
+    # sed range delete to the end of the rules file $f.
+    check_block='begins=$(sudo grep -c "^# BEGIN hubbify$" $f || true)
+        ends=$(sudo grep -c "^# END hubbify$" $f || true)
+        if [ "$begins" != "$ends" ] || [ "$begins" -gt 1 ]; then
+            echo "$f has an unterminated or repeated hubbify block; fix it by hand" >&2; exit 1
+        fi'
 
     # ufw reload leaves an undeclared chain alone, so the live DOCKER-USER rules are
     # flushed too (while opted in, every reload already resets that chain to the block).
@@ -85,6 +92,7 @@ firewall server:
         removed=$(ssh {{server}} "set -e; for rules in after.rules:iptables after6.rules:ip6tables; do
             f=/etc/ufw/\${rules%:*}
             if sudo grep -qs '^# BEGIN hubbify\$' \$f; then
+                $check_block
                 sudo sed -i '$strip_block' \$f; sudo \${rules#*:} -F DOCKER-USER; echo \$f
             fi
         done")
@@ -124,7 +132,8 @@ firewall server:
     }
 
     write_block() {
-        ssh {{server}} "sudo sed -i '$strip_block' $1 && sudo tee -a $1 >/dev/null" <<<"$2"
+        ssh {{server}} "f=$1; $check_block
+            sudo sed -i '$strip_block' $1 && sudo tee -a $1 >/dev/null" <<<"$2"
     }
 
     ipv4_ranges=$(fetch_ranges ips-v4)
