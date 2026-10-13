@@ -215,29 +215,24 @@ first, then traffic from Cloudflare's ranges, and drops only DNATed
 the containers' own outbound traffic keeps working.
 
 The IPv6 block only sees IPv6 traffic when Docker routes it through
-`DOCKER-USER`, which needs both Docker's ip6tables support (on unless
-`/etc/docker/daemon.json` sets `"ip6tables": false`) and a `proxy` network
-created with `--ipv6`. Otherwise Docker's userland docker-proxy carries
-published IPv6 traffic, which then passes ufw's `INPUT` (where 80/443 are
-allowed) and never reaches `DOCKER-USER`. So on a `CLOUDFLARE_ONLY` server
-with a global IPv6 address (ULA `fd00::/8` addresses do not count),
-`just firewall` checks both and aborts unless they hold.
+`DOCKER-USER`, which needs both Docker's ip6tables support (on by default) and
+a `proxy` network created with `--ipv6`. Otherwise Docker's userland
+docker-proxy carries published IPv6 traffic, which then passes ufw's `INPUT`
+(where 80/443 are allowed) and never reaches `DOCKER-USER`. So on a
+`CLOUDFLARE_ONLY` server with a global IPv6 address (ULA `fd00::/8` addresses
+do not count), `just firewall` checks both and aborts unless they hold.
 
-`just remote-up` creates the `proxy` network with `--ipv6` when it does not
-exist, which needs Docker 27 or later (it picks the IPv6 subnet from the
-daemon's default pool and has ip6tables on by default); on older daemons the
-create fails and the recipe says to create the network by hand with
-`--subnet <ipv6-cidr>`. An existing `proxy` network is left as is, so fresh
-servers pass the check, while a server whose network was created without IPv6
-needs it recreated:
+hubbify requires Docker 27 or later on servers: `just remote-up` aborts on an
+older daemon. It creates the `proxy` network with `--ipv6` when it does not
+exist, with the IPv6 subnet picked from the daemon's default pool. An existing
+`proxy` network is left as is, so fresh servers pass the check, while a server
+whose network was created without IPv6 needs it recreated:
 
 1. Take the proxy (project `proxy`) and every project down with
    `docker --context <name> compose -p <project> down`, which removes their
    containers; `docker network rm proxy` fails while any is attached.
 2. `docker --context <name> network rm proxy`
-3. `just remote-up <name>`, which creates the network with IPv6. On Docker
-   older than 27, first run
-   `docker --context <name> network create --ipv6 --subnet <ipv6-cidr> proxy`.
+3. `just remote-up <name>`, which creates the network with IPv6.
 4. Redeploy the projects.
 5. `just firewall <name>`
 

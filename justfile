@@ -151,14 +151,11 @@ firewall server:
             {
                 echo "{{server}} has a global IPv6 address, but Docker does not route IPv6 through"
                 echo "DOCKER-USER, so the Cloudflare-only rules would not filter IPv6. That needs Docker's"
-                echo "ip6tables support (on unless /etc/docker/daemon.json sets \"ip6tables\": false) and"
-                echo "a proxy network with IPv6. To recreate the network:"
+                echo "ip6tables support (on by default) and a proxy network with IPv6. To recreate the network:"
                 echo "  1. docker --context {{server}} compose -p <project> down, for the proxy (project"
                 echo "     'proxy') and every project, so no container is attached to the network"
                 echo "  2. docker --context {{server}} network rm proxy"
-                echo "  3. just remote-up {{server}}, which creates the network with IPv6 (on Docker"
-                echo "     older than 27, first run: docker --context {{server}} network create --ipv6"
-                echo "     --subnet <ipv6-cidr> proxy)"
+                echo "  3. just remote-up {{server}}, which creates the network with IPv6"
                 echo "  4. redeploy the projects"
                 echo "  5. just firewall {{server}}"
             } >&2
@@ -188,10 +185,12 @@ server-remove name:
 
 # Build and start the proxy on a server, e.g. `just remote-up myvps`
 remote-up context:
+    version=$(docker --context {{context}} version --format '{{{{.Server.Version}}'); \
+        [ "${version%%.*}" -ge 27 ] \
+        || { echo "hubbify needs Docker 27+ on the server; {{context}} runs Docker $version" >&2; exit 1; }
     mkdir -p servers/{{context}}/caddy
     docker --context {{context}} network inspect proxy >/dev/null 2>&1 \
-        || docker --context {{context}} network create --ipv6 proxy \
-        || { echo "--ipv6 without --subnet needs Docker 27 or later; otherwise run 'docker --context {{context}} network create --ipv6 --subnet <ipv6-cidr> proxy' and rerun" >&2; exit 1; }
+        || docker --context {{context}} network create --ipv6 proxy
     docker --context {{context}} compose --env-file servers/{{context}}/server.env -f proxy/compose.yml -f proxy/compose.remote.yml up -d --build
 
 # Follow proxy logs on a server
