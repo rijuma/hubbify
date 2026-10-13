@@ -86,6 +86,7 @@ server-remove name:
 
 # Build and start the proxy on a server, e.g. `just remote-up myvps`
 remote-up context:
+    mkdir -p servers/{{context}}/caddy
     docker --context {{context}} network inspect proxy >/dev/null 2>&1 || docker --context {{context}} network create proxy
     docker --context {{context}} compose --env-file servers/{{context}}/server.env -f proxy/compose.yml -f proxy/compose.remote.yml up -d --build
 

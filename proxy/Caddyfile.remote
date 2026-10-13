@@ -2,7 +2,8 @@
 #
 # caddy-docker-proxy merges this file with the config it generates from
 # container labels. Per-project routing lives in each project's two labels;
-# this file is the escape hatch for anything more complex.
+# this file is the escape hatch for anything more complex. Per-server blocks
+# from servers/<name>/caddy/Caddyfile are appended to it at build time.
 {
 	email {$ACME_EMAIL}
 

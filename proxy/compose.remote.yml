@@ -2,10 +2,15 @@
 # Only the differences from the local stack: the Cloudflare token for DNS-01,
 # the ACME account email, switching to the remote base Caddyfile (both
 # files are baked into the image; this just selects which one
-# caddy-docker-proxy loads), and the server identity stamp that project
-# deploys verify before touching the server (see docs/project-contract.md).
+# caddy-docker-proxy loads), the server identity stamp that project
+# deploys verify before touching the server (see docs/project-contract.md),
+# and the servers/<name>/caddy/ build context whose optional Caddyfile is
+# appended to the remote base Caddyfile (only that file reaches the image).
 services:
   caddy:
+    build:
+      additional_contexts:
+        server: ../servers/${SERVER_NAME}/caddy
     environment:
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:?set it in servers/<name>/server.env}
       - ACME_EMAIL=${ACME_EMAIL:?set it in servers/<name>/server.env}
