@@ -221,18 +221,25 @@ created with `--ipv6`. Otherwise Docker's userland docker-proxy carries
 published IPv6 traffic, which then passes ufw's `INPUT` (where 80/443 are
 allowed) and never reaches `DOCKER-USER`. So on a `CLOUDFLARE_ONLY` server
 with a global IPv6 address (ULA `fd00::/8` addresses do not count),
-`just firewall` checks both and aborts unless they hold. The way out is to
-recreate the `proxy` network with IPv6:
+`just firewall` checks both and aborts unless they hold.
+
+`just remote-up` creates the `proxy` network with `--ipv6` when it does not
+exist, which needs Docker 27 or later (it picks the IPv6 subnet from the
+daemon's default pool and has ip6tables on by default); on older daemons the
+create fails and the recipe says to create the network by hand with
+`--subnet <ipv6-cidr>`. An existing `proxy` network is left as is, so fresh
+servers pass the check, while a server whose network was created without IPv6
+needs it recreated:
 
 1. Take the proxy (project `proxy`) and every project down with
    `docker --context <name> compose -p <project> down`, which removes their
    containers; `docker network rm proxy` fails while any is attached.
 2. `docker --context <name> network rm proxy`
-3. `docker --context <name> network create --ipv6 proxy`, adding
-   `--subnet <ipv6-cidr>` if the daemon has no default IPv6 pool.
-4. `just remote-up <name>`, which keeps the existing `proxy` network.
-5. Redeploy the projects.
-6. `just firewall <name>`
+3. `just remote-up <name>`, which creates the network with IPv6. On Docker
+   older than 27, first run
+   `docker --context <name> network create --ipv6 --subnet <ipv6-cidr> proxy`.
+4. Redeploy the projects.
+5. `just firewall <name>`
 
 ## DNS (planned)
 
