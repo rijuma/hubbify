@@ -76,7 +76,7 @@ with that site like any other base-Caddyfile block.
   anything outside Cloudflare's ranges. The origin IP is closed to everyone
   but Cloudflare once `just firewall` has completed with the flag set, which
   on a host with a global IPv6 address needs a `proxy` network with IPv6 (see
-  Server bootstrap). Closing 80 does not break renewal: DNS-01 needs no
+  Firewall). Closing 80 does not break renewal: DNS-01 needs no
   inbound challenge traffic. Servers that also host grey-cloud (DNS only)
   domains leave the flag empty and keep 80/443 open.
 
@@ -130,21 +130,6 @@ journal vacuum), `just upgrade` to install OS updates, rebuild + redeploy
 the proxy, report whether a reboot is pending and then refresh the firewall;
 it fails if `just firewall` refuses, after the reboot report. These assume
 the admin user the bootstrap creates (passwordless sudo).
-
-`just firewall <name>` applies `CLOUDFLARE_ONLY` from `server.env` (empty or
-missing means off; any value other than `true` aborts). When `true`, it
-fetches Cloudflare's IPv4 and IPv6 lists on the client, aborts if ufw is not
-active on the server or if the server has a global IPv6 address that Docker
-does not route through `DOCKER-USER` (see Server bootstrap), writes a
-`# BEGIN hubbify` … `# END hubbify` block into `/etc/ufw/after.rules` and
-`/etc/ufw/after6.rules` (replacing the previous one) and reloads ufw. When
-off, it removes that block, flushes the live `DOCKER-USER` chain (a ufw
-reload alone would leave the rules until reboot) and reloads ufw, doing
-nothing if there was no block, so opting out is clearing the flag and
-rerunning. It touches no other rule, so SSH stays as configured, and it
-refuses to edit a rules file whose hubbify block is unterminated or repeated.
-Running it again yields the same files; `upgrade` calls it so Cloudflare's
-ranges stay current.
 
 ## Deploys
 
@@ -200,19 +185,22 @@ The manual escape hatch for a project without CI is running the same
 `envs/<env>/.env`; hubbify holds no project env or deploy config, only
 proxy-side site extras in `servers/<name>/caddy/Caddyfile`.
 
-## DNS (planned)
+## Firewall
 
-Cloudflare A records are upserted synchronously at deploy time, read from the
-same `caddy` labels the proxy uses. The API token lives on the client/CI only,
-never on the server. Explicit `dns prune` / `dns audit` commands handle
-cleanup; there is no background watcher (async failures are invisible and
-deletes are unsafe).
-
-## Server bootstrap (planned)
-
-An idempotent script prepares a fresh VPS: SSH hardening, ufw (ssh/80/443),
-docker install, the `proxy` network, and the proxy stack. Until it exists, the
-proxy can be started on any docker host with the `just` recipes.
+`just firewall <name>` applies `CLOUDFLARE_ONLY` from `server.env` (empty or
+missing means off; any value other than `true` aborts). When `true`, it
+fetches Cloudflare's IPv4 and IPv6 lists on the client, aborts if ufw is not
+active on the server or if the server has a global IPv6 address that Docker
+does not route through `DOCKER-USER` (see below), writes a `# BEGIN hubbify`
+… `# END hubbify` block into `/etc/ufw/after.rules` and
+`/etc/ufw/after6.rules` (replacing the previous one) and reloads ufw. When
+off, it removes that block, flushes the live `DOCKER-USER` chain (a ufw
+reload alone would leave the rules until reboot) and reloads ufw, doing
+nothing if there was no block, so opting out is clearing the flag and
+rerunning. It touches no other rule, so SSH stays as configured, and it
+refuses to edit a rules file whose hubbify block is unterminated or repeated.
+Running it again yields the same files; `upgrade` calls it so Cloudflare's
+ranges stay current.
 
 ufw must be active before `just firewall` runs on a `CLOUDFLARE_ONLY` server.
 ufw's own allow/deny rules do not cover the proxy's 80/443: Docker DNATs
@@ -245,6 +233,22 @@ recreate the `proxy` network with IPv6:
 4. `just remote-up <name>`, which keeps the existing `proxy` network.
 5. Redeploy the projects.
 6. `just firewall <name>`
+
+## DNS (planned)
+
+Cloudflare A records are upserted synchronously at deploy time, read from the
+same `caddy` labels the proxy uses. The API token lives on the client/CI only,
+never on the server. Explicit `dns prune` / `dns audit` commands handle
+cleanup; there is no background watcher (async failures are invisible and
+deletes are unsafe).
+
+## Server bootstrap (planned)
+
+An idempotent script prepares a fresh VPS: SSH hardening, ufw (ssh/80/443),
+docker install, the `proxy` network, and the proxy stack. Until it exists, the
+proxy can be started on any docker host with the `just` recipes.
+
+`just firewall`, which builds on that ufw setup, already exists; see Firewall.
 
 ## Repository layout
 
