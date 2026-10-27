@@ -176,7 +176,7 @@ server-create name:
     echo "Created servers/{{name}} — fill in server.env"
 
 # Remove a server folder, e.g. `just server-remove myvps`
-[confirm("This deletes the server's secrets and project envs. Continue? (y/N)")]
+[confirm("This deletes the server's secrets and Caddyfile. Continue? (y/N)")]
 server-remove name:
     #!/usr/bin/env bash
     set -euo pipefail

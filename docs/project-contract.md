@@ -55,7 +55,10 @@ this contract out of the box.
    context's stamp matches the env's `SERVER_NAME`. This makes
    deploying-to-the-wrong-server fail closed: unknown env names error out,
    the context is repo-declared data rather than a CLI argument, and a
-   context pointing at the wrong machine is caught before `up`.
+   context pointing at the wrong machine is caught before `up`. An env whose
+   `server.conf` sets `PROTECTED=true` also asks you to type its name before
+   a manual deploy; CI skips the prompt, since GitHub environment protection
+   is the gate there.
 
 6. **Reach siblings by project-unique names.** Docker gives every container
    its service name as an alias on every network it joins, so on the shared
@@ -72,6 +75,30 @@ this contract out of the box.
            aliases:
              - myapp-api
    ```
+
+## Deploy flow
+
+What `just deploy <env>` in a hubbify-template project does with these rules.
+Every check fails closed, before anything reaches the server:
+
+```mermaid
+flowchart TD
+    start["just deploy env"] --> known{"envs/env/ exists?"}
+    known -->|"no"| abort1["abort: unknown env"]
+    known -->|"yes"| conf{"has server.conf?"}
+    conf -->|"no"| abort2["abort: local env, use just up"]
+    conf -->|"yes"| prot{"PROTECTED=true<br/>outside CI?"}
+    prot -->|"yes"| typed{"env name typed?"}
+    typed -->|"no"| abort3["abort"]
+    typed -->|"yes"| merge
+    prot -->|"no"| merge["merge infra/compose.yml<br/>+ envs/env/compose.yml"]
+    merge --> domain{"domain still<br/>.localhost?"}
+    domain -->|"yes"| abort4["abort: overlay must set the real domain"]
+    domain -->|"no"| stamp{"proxy on DOCKER_CONTEXT stamped<br/>hubbify.server=SERVER_NAME?"}
+    stamp -->|"no"| abort5["abort: wrong server"]
+    stamp -->|"yes"| up["compose up -d --build<br/>over the SSH context"]
+    up --> caddy["proxy reads the labels,<br/>routes the domain, issues the certificate"]
+```
 
 ## Visitor IP
 

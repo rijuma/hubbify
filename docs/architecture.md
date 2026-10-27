@@ -7,21 +7,37 @@ config language and no generation step.
 
 ## The big picture
 
-```
-┌─ VPS (or local machine) ─────────────────────────────────┐
-│                                                          │
-│  caddy-docker-proxy ──── watches ───→ docker socket      │
-│      │ :80/:443                                          │
-│      │                                                   │
-│  ════╪═══════════ external network: proxy ═══════════    │
-│      │                    │                    │         │
-│  ┌─ project A ─────┐  ┌─ project B ─────┐  ┌─ ... ─┐     │
-│  │ web ←──────────────→ web             │  │       │     │
-│  │  │ default net  │  │  │ default net  │  │       │     │
-│  │ db (not on      │  │ redis           │  │       │     │
-│  │     proxy net)  │  │                 │  │       │     │
-│  └─────────────────┘  └─────────────────┘  └───────┘     │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    visitor["Visitor"]
+    cf["Cloudflare<br/>(remote only)"]
+
+    subgraph host["VPS or local machine"]
+        sock[("docker socket")]
+        caddy["caddy-docker-proxy<br/>only container binding 80/443"]
+
+        subgraph proxynet["external network: proxy"]
+            caddy
+            webA["project A: web"]
+            webB["project B: web"]
+        end
+
+        subgraph netA["project A default network"]
+            dbA[("db")]
+        end
+        subgraph netB["project B default network"]
+            redisB[("redis")]
+        end
+
+        caddy -->|"reverse_proxy"| webA
+        caddy -->|"reverse_proxy"| webB
+        webA --- dbA
+        webB --- redisB
+    end
+
+    visitor --> cf
+    cf -->|"80/443"| caddy
+    caddy -. "watches labels" .-> sock
 ```
 
 ## Reverse proxy
@@ -42,7 +58,8 @@ Anything more complex goes into the base Caddyfile that caddy-docker-proxy
 merges with the generated config:
 
 - `proxy/Caddyfile` — local base (empty; escape hatch only).
-- `proxy/Caddyfile.remote` — remote base (ACME email + `acme_dns cloudflare`).
+- `proxy/Caddyfile.remote` — remote base (ACME email, `acme_dns cloudflare`,
+  Cloudflare `trusted_proxies`).
 - `servers/<name>/caddy/Caddyfile` — optional per-server extras (auth,
   headers, redirects for the sites that server hosts), as plain Caddyfile.
 
@@ -54,10 +71,22 @@ blocks are appended inline rather than imported because caddy-docker-proxy
 does not expand `import`, and a block for a label-generated domain is merged
 with that site like any other base-Caddyfile block.
 
+```mermaid
+flowchart LR
+    base["proxy/Caddyfile.remote"] --> build["docker build<br/>proxy/Dockerfile"]
+    extras["servers/&lt;name&gt;/caddy/Caddyfile<br/>(optional)"] -->|"appended inline"| build
+    build --> image["proxy image<br/>base Caddyfile baked in"]
+    labels["project labels<br/>caddy + caddy.reverse_proxy"] -->|"read from docker socket"| gen["generated config"]
+    image --> merged["running Caddy config<br/>hot-reloaded on container changes"]
+    gen --> merged
+```
+
 ## TLS
 
 - **Locally** every project uses a `<name>.localhost` domain. Caddy serves
-  these with its internal CA, so dev traffic is real HTTPS.
+  these with its internal CA, so dev traffic is real HTTPS. `just trust`
+  installs that CA in the WSL/Linux store and, when available, the Windows
+  user store, so browsers accept it.
 - **Remotely** all certificates are issued via DNS-01 through Cloudflare
   (`CLOUDFLARE_API_TOKEN` from `servers/<name>/server.env`, injected into the
   proxy container at deploy). This works behind Cloudflare's proxy (orange
@@ -100,7 +129,7 @@ context, and its folder in this repo:
 ```
 servers/<name>/
   server.env            server secrets and settings: CLOUDFLARE_API_TOKEN,
-                        CLOUDFLARE_ONLY (gitignored)
+                        ACME_EMAIL, SERVER_NAME, CLOUDFLARE_ONLY (gitignored)
   caddy/Caddyfile       optional per-server Caddyfile (gitignored)
 ```
 
@@ -180,6 +209,27 @@ the wrong machine aborts. The upgrade path for bigger projects is GitHub
 Actions building images to GHCR, with the same compose-over-context deploy
 pulling instead of building.
 
+```mermaid
+sequenceDiagram
+    participant H as hubbify checkout
+    participant P as project repo / CI runner
+    participant D as server docker daemon
+    participant C as caddy-docker-proxy
+
+    Note over H,D: once per server, and on every upgrade
+    H->>D: just remote-up name (Docker 27+ check, proxy network with IPv6)
+    H->>D: compose up --build, server.env as container env
+    D->>C: start proxy stamped hubbify.server=SERVER_NAME
+
+    Note over P,D: every project deploy
+    P->>P: write envs/env/.env from the ENV_FILE secret
+    P->>D: is a container stamped with the env's SERVER_NAME running?
+    D-->>P: yes, else the deploy aborts
+    P->>D: compose up -d --build (base + env overlay)
+    D-->>C: container started with caddy labels
+    C->>C: regenerate config, get certificate via DNS-01
+```
+
 The manual escape hatch for a project without CI is running the same
 `just deploy <env>` from the project directory with a local
 `envs/<env>/.env`; hubbify holds no project env or deploy config, only
@@ -214,6 +264,17 @@ first, then traffic from Cloudflare's ranges, and drops only DNATed
 (published-port) connections whose original destination port is 80 or 443, so
 the containers' own outbound traffic keeps working.
 
+```mermaid
+flowchart TD
+    pkt["forwarded packet<br/>in DOCKER-USER"] --> est{"established<br/>or related?"}
+    est -->|"yes"| ret["RETURN: Docker's rules continue"]
+    est -->|"no"| cfr{"source in Cloudflare ranges<br/>and original port 80/443?"}
+    cfr -->|"yes"| ret
+    cfr -->|"no"| dnat{"DNATed to a published<br/>port 80 or 443?"}
+    dnat -->|"yes"| drop["DROP"]
+    dnat -->|"no: e.g. container outbound"| ret
+```
+
 The IPv6 block only sees IPv6 traffic when Docker routes it through
 `DOCKER-USER`, which needs both Docker's ip6tables support (on by default) and
 a `proxy` network created with `--ipv6`. Otherwise Docker's userland
@@ -247,7 +308,7 @@ deletes are unsafe).
 ## Server bootstrap (planned)
 
 An idempotent script prepares a fresh VPS: SSH hardening, ufw (ssh/80/443),
-docker install, the `proxy` network, and the proxy stack. Until it exists, the
+Docker 27+ install, and the proxy stack. Until it exists, the
 proxy can be started on any docker host with the `just` recipes.
 
 `just firewall`, which builds on that ufw setup, already exists; see Firewall.

@@ -11,6 +11,7 @@ follow [docs/project-contract.md](docs/project-contract.md).
 
 ```sh
 just up      # build + start the proxy (first build compiles Caddy, takes a bit)
+just trust   # trust Caddy's local CA so browsers accept https://*.localhost
 ```
 
 Then create your project from
@@ -25,5 +26,6 @@ template") — it ships a working app already honoring the
 
 Working: the local and remote proxy stacks with the label-based project
 contract, multi-server management (`servers/<name>/`), deploys over SSH
-docker contexts, and host maintenance recipes. Planned next: server
+docker contexts, host maintenance recipes, and the opt-in Cloudflare-only
+firewall. Planned next: server
 bootstrap script, deploy-time Cloudflare DNS sync.
