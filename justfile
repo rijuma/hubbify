@@ -9,6 +9,7 @@ _network:
 
 # Build and start the reverse proxy locally
 up: _network
+    mkdir -p servers/local/caddy
     docker compose -f proxy/compose.yml up -d --build
 
 # Stop the reverse proxy

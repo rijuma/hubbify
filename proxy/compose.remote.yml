@@ -4,8 +4,9 @@
 # files are baked into the image; this just selects which one
 # caddy-docker-proxy loads), the server identity stamp that project
 # deploys verify before touching the server (see docs/project-contract.md),
-# and the servers/<name>/caddy/ build context whose optional Caddyfile is
-# appended to the remote base Caddyfile (only that file reaches the image).
+# and the servers/<name>/caddy/ build context (in place of the local
+# servers/local/caddy/) whose optional Caddyfile is appended to the base
+# Caddyfiles (only that file reaches the image).
 services:
   caddy:
     build:

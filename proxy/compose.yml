@@ -1,6 +1,11 @@
 services:
   caddy:
-    build: .
+    build:
+      context: .
+      # Optional local site extras; the remote overlay points this at the
+      # server's folder instead.
+      additional_contexts:
+        server: ../servers/local/caddy
     restart: unless-stopped
     ports:
       - '80:80'

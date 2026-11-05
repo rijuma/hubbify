@@ -41,7 +41,9 @@ this contract out of the box.
    hosting server's `servers/<name>/caddy/Caddyfile` in hubbify, written as
    plain Caddyfile — never as label trees. A block for the project's domain
    there is merged with the site its labels generate, and only that server
-   serves it.
+   serves it. The same config for the project's local domain goes in
+   `servers/local/caddy/Caddyfile`, which `just up` appends to the local
+   base.
 
 4. **Do not publish ports.** The proxy reaches the app over the `proxy`
    network; only the proxy binds 80/443 on the host.

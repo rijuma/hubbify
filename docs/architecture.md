@@ -58,23 +58,29 @@ Anything more complex goes into the base Caddyfile that caddy-docker-proxy
 merges with the generated config:
 
 - `proxy/Caddyfile` — local base (empty; escape hatch only).
+- `servers/local/caddy/Caddyfile` — optional extras for the local proxy, the
+  local counterpart of a server's file below (e.g. the same headers on a
+  project's `.localhost` domain).
 - `proxy/Caddyfile.remote` — remote base (ACME email, `acme_dns cloudflare`,
   Cloudflare `trusted_proxies`).
 - `servers/<name>/caddy/Caddyfile` — optional per-server extras (auth,
   headers, redirects for the sites that server hosts), as plain Caddyfile.
 
-The base Caddyfiles are baked into the proxy image. On `just remote-up`,
-`proxy/compose.remote.yml` passes `servers/<name>/caddy/` as an extra build
-context, and `proxy/Dockerfile` appends its `Caddyfile`, when present, to the
-end of `Caddyfile.remote`; without one the remote base is used as is. The
-blocks are appended inline rather than imported because caddy-docker-proxy
+The base Caddyfiles are baked into the proxy image. The build takes one
+`servers/<name>/caddy/` folder as an extra build context: `servers/local/caddy/`
+on `just up` (from `proxy/compose.yml`), the server's own folder on
+`just remote-up` (from `proxy/compose.remote.yml`). `proxy/Dockerfile` appends
+its `Caddyfile`, when present, to the end of the base files; without one the
+bases are used as they are. The blocks are appended inline rather than imported because caddy-docker-proxy
 does not expand `import`, and a block for a label-generated domain is merged
-with that site like any other base-Caddyfile block.
+with that site like any other base-Caddyfile block. That merge needs the block's address to be exactly the one domain: a
+block listing several domains is a separate site that shadows the generated
+ones, so each domain gets its own block.
 
 ```mermaid
 flowchart LR
-    base["proxy/Caddyfile.remote"] --> build["docker build<br/>proxy/Dockerfile"]
-    extras["servers/&lt;name&gt;/caddy/Caddyfile<br/>(optional)"] -->|"appended inline"| build
+    base["proxy/Caddyfile or<br/>proxy/Caddyfile.remote"] --> build["docker build<br/>proxy/Dockerfile"]
+    extras["servers/&lt;name&gt;/caddy/Caddyfile<br/>(optional; servers/local locally)"] -->|"appended inline"| build
     build --> image["proxy image<br/>base Caddyfile baked in"]
     labels["project labels<br/>caddy + caddy.reverse_proxy"] -->|"read from docker socket"| gen["generated config"]
     image --> merged["running Caddy config<br/>hot-reloaded on container changes"]
@@ -136,7 +142,9 @@ servers/<name>/
 The `caddy/` subfolder holds only the Caddyfile because the docker build
 uploads a whole build-context folder to the server's daemon, so pointing it at
 `servers/<name>/` would ship `server.env` to the server and keep it in the
-build cache. `remote-up` creates the folder if it is missing. `SERVER_NAME` in
+build cache. `remote-up` creates the folder if it is missing, and `up` does
+the same for `servers/local/caddy/`, so `local` is not available as a server
+name. `SERVER_NAME` in
 `server.env` must equal the `servers/<name>/` folder name: `remote-up` picks
 the env file by the context (folder) name, while the build context path comes
 from `SERVER_NAME`.
@@ -319,6 +327,7 @@ proxy can be started on any docker host with the `just` recipes.
 justfile              task entry points (just --list)
 proxy/                the reverse proxy stack (local + remote overlay)
 servers/<name>/       per-server secrets (server.env) and caddy/Caddyfile
+servers/local/        caddy/Caddyfile for the local proxy (no server.env)
 servers/_template/    tracked skeleton copied by `just server-create`
 docs/                 you are here
 ```

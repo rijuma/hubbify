@@ -3,4 +3,6 @@
 # caddy-docker-proxy merges this file with the config it generates from
 # container labels. Per-project routing lives in each project's two labels;
 # this file is the escape hatch for anything more complex (extra directives,
-# snippets, odd sites). Keep it empty unless something truly needs it.
+# snippets, odd sites). Keep it empty unless something truly needs it: site
+# extras for this machine go in servers/local/caddy/Caddyfile (gitignored),
+# which is appended to this file at build time.
