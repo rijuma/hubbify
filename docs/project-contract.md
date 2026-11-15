@@ -36,8 +36,26 @@ this contract out of the box.
    real domain were the default, a local run would attempt real ACME
    challenges.
 
-3. **No other `caddy.*` labels.** If a project needs more than
-   domain + port (extra headers, auth, redirects), that config goes into the
+3. **Three flat extras, and no other `caddy.*` labels.** An environment
+   that needs a guard at the proxy may add these, in the overlay of the env
+   they apply to (or in the base when every env needs them):
+
+   ```yaml
+   labels:
+     caddy: staging.myapp.com
+     caddy.basic_auth.<user>: ${STAGING_AUTH_HASH:?}
+     caddy.header.X-Robots-Tag: noindex
+     caddy.respond: /private-path 404
+   ```
+
+   - `caddy.basic_auth.<user>` — the value is a `caddy hash-password` hash.
+     Keep it out of git: read it from the env's secrets through compose
+     interpolation, as above. Written inline, every `$` of the hash is `$$`.
+   - `caddy.header.<Name>` — one response header per label.
+   - `caddy.respond` — a path matcher and a status, to refuse one path.
+
+   They travel with the project's deploy, so the proxy needs no rebuild.
+   Anything else (redirects, several matchers, nested blocks) goes into the
    hosting server's `servers/<name>/caddy/Caddyfile` in hubbify, written as
    plain Caddyfile — never as label trees. A block for the project's domain
    there is merged with the site its labels generate, and only that server

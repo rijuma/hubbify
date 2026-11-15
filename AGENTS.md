@@ -17,12 +17,14 @@ disposability, CI parity) are in `docs/architecture.md` → Deploys.
 
 ## Hard rules
 
-- **Two labels per project, never more.** Routing is declared only as
-  `caddy: <domain>` + `caddy.reverse_proxy: '{{upstreams <port>}}'`
-  (see `docs/project-contract.md`). Anything fancier goes in the hosting
-  server's `servers/<name>/caddy/Caddyfile` (`servers/local/caddy/Caddyfile`
-  for the local proxy), written as plain Caddyfile — never as `caddy.*` label
-  trees.
+- **Two routing labels per project, plus three flat extras.** Routing is
+  declared only as `caddy: <domain>` +
+  `caddy.reverse_proxy: '{{upstreams <port>}}'`. A project may add
+  `caddy.basic_auth.<user>`, `caddy.header.<Name>` and `caddy.respond` to
+  guard an environment (see `docs/project-contract.md`), and nothing else.
+  Anything fancier goes in the hosting server's
+  `servers/<name>/caddy/Caddyfile` (`servers/local/caddy/Caddyfile` for the
+  local proxy), written as plain Caddyfile — never as `caddy.*` label trees.
 - **Isolation:** only web-facing services join the external `proxy` network;
   databases/workers stay on the project default network. No project publishes
   host ports.
@@ -30,8 +32,8 @@ disposability, CI parity) are in `docs/architecture.md` → Deploys.
   (gitignored) on the machine that runs the deploy — never committed, never
   stored on the server outside the proxy container's env. Project production
   envs are GitHub environment secrets in each project's own repo; hubbify
-  holds no project env or deploy config, only proxy-side site extras in
-  `servers/<name>/caddy/Caddyfile`.
+  holds no project env or deploy config, only the proxy-side site extras
+  that don't fit the allowed labels, in `servers/<name>/caddy/Caddyfile`.
 
 ## Conventions
 

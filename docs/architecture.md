@@ -53,9 +53,11 @@ Caddy custom-built (see `proxy/Dockerfile`) with three modules:
   module, as a `trusted_proxies` source (remote only).
 
 Projects declare their routing with exactly two labels (see
-[project-contract.md](project-contract.md)); nothing else is allowed in labels.
-Anything more complex goes into the base Caddyfile that caddy-docker-proxy
-merges with the generated config:
+[project-contract.md](project-contract.md)), plus up to three flat extras to
+guard an environment (`caddy.basic_auth.<user>`, `caddy.header.<Name>`,
+`caddy.respond`); nothing else is allowed in labels. Anything more complex
+goes into the base Caddyfile that caddy-docker-proxy merges with the
+generated config:
 
 - `proxy/Caddyfile` — local base (empty; escape hatch only).
 - `servers/local/caddy/Caddyfile` — optional extras for the local proxy, the
@@ -63,8 +65,9 @@ merges with the generated config:
   project's `.localhost` domain).
 - `proxy/Caddyfile.remote` — remote base (ACME email, `acme_dns cloudflare`,
   Cloudflare `trusted_proxies`).
-- `servers/<name>/caddy/Caddyfile` — optional per-server extras (auth,
-  headers, redirects for the sites that server hosts), as plain Caddyfile.
+- `servers/<name>/caddy/Caddyfile` — optional per-server extras (redirects
+  and whatever else the allowed labels can't express for the sites that
+  server hosts), as plain Caddyfile.
 
 The base Caddyfiles are baked into the proxy image. The build takes one
 `servers/<name>/caddy/` folder as an extra build context: `servers/local/caddy/`
@@ -240,8 +243,9 @@ sequenceDiagram
 
 The manual escape hatch for a project without CI is running the same
 `just deploy <env>` from the project directory with a local
-`envs/<env>/.env`; hubbify holds no project env or deploy config, only
-proxy-side site extras in `servers/<name>/caddy/Caddyfile`.
+`envs/<env>/.env`; hubbify holds no project env or deploy config, only the
+proxy-side site extras that don't fit the allowed labels, in
+`servers/<name>/caddy/Caddyfile`.
 
 ## Firewall
 
