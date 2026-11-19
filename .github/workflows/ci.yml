@@ -45,3 +45,9 @@ jobs:
           echo "Smoke test failed; proxy logs:"
           docker compose -f proxy/compose.yml logs caddy
           exit 1
+
+      - name: Caddy has no Docker socket and cannot write through the socket proxy
+        run: |
+          docker compose -f proxy/compose.yml exec -T caddy sh -c '
+            ! test -e /var/run/docker.sock &&
+            ! wget -qO- --post-data=x http://socket-proxy:2375/containers/create'

@@ -7,6 +7,8 @@ services:
       additional_contexts:
         server: ../servers/local/caddy
     restart: unless-stopped
+    depends_on:
+      - socket-proxy
     ports:
       - '80:80'
       - '443:443'
@@ -14,16 +16,40 @@ services:
     environment:
       - CADDY_INGRESS_NETWORKS=proxy
       - CADDY_DOCKER_CADDYFILE_PATH=/etc/caddy/Caddyfile
+      - DOCKER_HOST=tcp://socket-proxy:2375
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - 'no-new-privileges:true'
     networks:
       - proxy
+      - docker-api
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - data:/data
       - config:/config
+
+  # Read-only Docker API for caddy-docker-proxy: GET only, on the sections
+  # it reads (events, ping and version are on by the image's default).
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1
+      - NETWORKS=1
+      - INFO=1
+      - POST=0
+    networks:
+      - docker-api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 networks:
   proxy:
     external: true
+  docker-api:
+    internal: true
 
 volumes:
   data:

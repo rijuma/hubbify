@@ -29,6 +29,10 @@ flowchart TB
             redisB[("redis")]
         end
 
+        subgraph apinet["internal network: docker-api"]
+            socketproxy["socket-proxy<br/>read-only Docker API"]
+        end
+
         caddy -->|"reverse_proxy"| webA
         caddy -->|"reverse_proxy"| webB
         webA --- dbA
@@ -37,7 +41,8 @@ flowchart TB
 
     visitor --> cf
     cf -->|"80/443"| caddy
-    caddy -. "watches labels" .-> sock
+    caddy -. "watches labels (GET only)" .-> socketproxy
+    socketproxy -. "mounted read-only" .-> sock
 ```
 
 ## Reverse proxy
@@ -45,8 +50,9 @@ flowchart TB
 The proxy is [lucaslorentz/caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy):
 Caddy custom-built (see `proxy/Dockerfile`) with three modules:
 
-- **caddy-docker-proxy** — watches the docker socket, builds a Caddyfile in
-  memory from container labels, and hot-reloads Caddy when containers change.
+- **caddy-docker-proxy** — watches the Docker API through the socket proxy,
+  builds a Caddyfile in memory from container labels, and hot-reloads Caddy
+  when containers change.
 - **caddy-dns/cloudflare** — solves ACME DNS-01 challenges against Cloudflare
   (remote only).
 - **caddy-cloudflare-ip** — provides Cloudflare's IP ranges, refreshed by the
@@ -85,10 +91,25 @@ flowchart LR
     base["proxy/Caddyfile or<br/>proxy/Caddyfile.remote"] --> build["docker build<br/>proxy/Dockerfile"]
     extras["servers/&lt;name&gt;/caddy/Caddyfile<br/>(optional; servers/local locally)"] -->|"appended inline"| build
     build --> image["proxy image<br/>base Caddyfile baked in"]
-    labels["project labels<br/>caddy + caddy.reverse_proxy"] -->|"read from docker socket"| gen["generated config"]
+    labels["project labels<br/>caddy + caddy.reverse_proxy"] -->|"read through socket-proxy"| gen["generated config"]
     image --> merged["running Caddy config<br/>hot-reloaded on container changes"]
     gen --> merged
 ```
+
+Caddy is the only container exposed to the internet, so it never holds the
+Docker socket: a socket mounted `:ro` still accepts every API call, and a
+label such as `caddy.reverse_proxy: unix//var/run/docker.sock` would hand the
+daemon to anyone who can reach that site. Instead the `socket-proxy` service
+([tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy),
+pinned by digest in `proxy/compose.yml`) mounts the socket read-only and
+answers only GET requests on the sections caddy-docker-proxy reads
+(containers, networks, info, events, ping, version); every other request,
+and every POST, gets a 403. It publishes no ports and joins only
+`docker-api`, a network declared `internal: true` that only it and Caddy
+join; Caddy reaches it through `DOCKER_HOST=tcp://socket-proxy:2375` and
+keeps routing over `proxy` (`CADDY_INGRESS_NETWORKS=proxy`). The Caddy
+container also drops every Linux capability except `NET_BIND_SERVICE` (to
+bind 80/443) and runs with `no-new-privileges`.
 
 ## TLS
 
