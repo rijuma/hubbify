@@ -57,7 +57,7 @@ cleanup server:
     ssh {{server}} "df -h /"
 
 # Update a server: install OS updates, then rebuild + redeploy the proxy and refresh its firewall
-upgrade server:
+upgrade server: (_server-name server)
     #!/usr/bin/env bash
     set -euo pipefail
     ssh {{server}} "sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get -yq upgrade"
@@ -70,7 +70,7 @@ upgrade server:
     just firewall {{server}}
 
 # Restrict 80/443 to Cloudflare when server.env has CLOUDFLARE_ONLY=true, else lift it
-firewall server:
+firewall server: (_server-name server)
     #!/usr/bin/env bash
     set -euo pipefail
     cloudflare_only=$(sed -n 's/^CLOUDFLARE_ONLY=//p' servers/{{server}}/server.env | tail -n 1)
@@ -167,8 +167,13 @@ firewall server:
     write_block /etc/ufw/after6.rules "$(rules_block "$ipv6_ranges")"
     ssh {{server}} "sudo ufw reload"
 
+# Reject a server name that is not a plain folder name under servers/
+_server-name name:
+    @[[ {{quote(name)}} =~ ^[a-z0-9][a-z0-9-]*$ ]] \
+        || { printf 'Invalid server name %s: use lowercase letters, digits and hyphens, starting with a letter or digit\n' {{quote(name)}} >&2; exit 1; }
+
 # Create a server folder from the template, e.g. `just server-create myvps`
-server-create name:
+server-create name: (_server-name name)
     #!/usr/bin/env bash
     set -euo pipefail
     dir="{{justfile_directory()}}/servers/{{name}}"
@@ -178,14 +183,13 @@ server-create name:
 
 # Remove a server folder, e.g. `just server-remove myvps`
 [confirm("This deletes the server's secrets and Caddyfile. Continue? (y/N)")]
-server-remove name:
+server-remove name: (_server-name name)
     #!/usr/bin/env bash
     set -euo pipefail
-    [ "{{name}}" != "_template" ] || { echo "Refusing to remove the template"; exit 1; }
     rm -rf "{{justfile_directory()}}/servers/{{name}}"
 
 # Build and start the proxy on a server, e.g. `just remote-up myvps`
-remote-up context:
+remote-up context: (_server-name context)
     version=$(docker --context {{context}} version --format '{{{{.Server.Version}}'); \
         [ "${version%%.*}" -ge 27 ] \
         || { echo "hubbify needs Docker 27+ on the server; {{context}} runs Docker $version" >&2; exit 1; }
@@ -195,5 +199,5 @@ remote-up context:
     docker --context {{context}} compose --env-file servers/{{context}}/server.env -f proxy/compose.yml -f proxy/compose.remote.yml up -d --build
 
 # Follow proxy logs on a server
-remote-logs context:
+remote-logs context: (_server-name context)
     docker --context {{context}} compose --env-file servers/{{context}}/server.env -f proxy/compose.yml -f proxy/compose.remote.yml logs -f caddy

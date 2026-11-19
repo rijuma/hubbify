@@ -133,7 +133,9 @@ the proxy binds 80/443.
 
 One hubbify checkout manages any number of servers. A server is identified by
 one name used everywhere: the SSH alias in `~/.ssh/config`, the docker
-context, and its folder in this repo:
+context, and its folder in this repo. The name uses only lowercase letters,
+digits and hyphens, and starts with a letter or digit; the recipes that turn it
+into a path under `servers/` reject any other name:
 
 ```
 servers/<name>/
