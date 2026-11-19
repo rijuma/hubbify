@@ -12,7 +12,7 @@ Everything goes through `just` (run `just --list`). Local: `up`, `down`,
 `just remote-up myvps`. Server operations are always just recipes run from
 the client, wrapping `docker --context` or one-off `ssh` commands — never
 scripts installed on the server, never a server-side agent. Servers hold no
-compose files or repos; the reasons (drift, credentials, secrets at rest,
+compose files or repos; the reasons (drift, credentials, no `.env` files,
 disposability, CI parity) are in `docs/architecture.md` → Deploys.
 
 ## Hard rules
