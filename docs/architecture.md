@@ -120,7 +120,10 @@ bind 80/443) and runs with `no-new-privileges`.
 - **Remotely** all certificates are issued via DNS-01 through Cloudflare
   (`CLOUDFLARE_API_TOKEN` from `servers/<name>/server.env`, injected into the
   proxy container at deploy). This works behind Cloudflare's proxy (orange
-  cloud) and needs no port-80 challenge.
+  cloud) and needs no port-80 challenge. Each server gets its own token,
+  scoped to Zone → DNS → Edit on only the zones that server hosts, never one
+  token shared across servers: every deployer on a server can read it (see
+  [the trust model](project-contract.md#trust-model)).
 - **Cloudflare zones must use SSL/TLS mode "Full (strict)".** Caddy holds
   real certificates, and it redirects port 80 to HTTPS — under "Flexible"
   Cloudflare fetches the origin over plain HTTP, which loops on that
@@ -148,7 +151,11 @@ reachable from other projects or from the proxy network. Web-facing services
 all share `proxy`, so they can reach each other there; a service on `proxy`
 reaches its own siblings only by project-unique names (rule 6 in
 [project-contract.md](project-contract.md)). No project publishes ports; only
-the proxy binds 80/443.
+the proxy binds 80/443. Traffic between services on `proxy` bypasses Caddy,
+so a proxy-level guard such as `caddy.basic_auth` does not protect a service
+from its neighbours, and a neighbour can send any `CF-Connecting-IP` value.
+The network isolates projects from the internet, not from each other; see
+[the trust model](project-contract.md#trust-model).
 
 ## Servers
 
@@ -168,9 +175,10 @@ servers/<name>/
 The `caddy/` subfolder holds only the Caddyfile because the docker build
 uploads a whole build-context folder to the server's daemon, so pointing it at
 `servers/<name>/` would ship `server.env` to the server and keep it in the
-build cache. `remote-up` creates the folder if it is missing, and `up` does
-the same for `servers/local/caddy/`, so `local` is not available as a server
-name. `SERVER_NAME` in
+build cache. `CLOUDFLARE_API_TOKEN` in `server.env` is that server's own
+token, limited to the zones it hosts (see TLS). `remote-up` creates the
+folder if it is missing, and `up` does the same for `servers/local/caddy/`,
+so `local` is not available as a server name. `SERVER_NAME` in
 `server.env` must equal the `servers/<name>/` folder name: `remote-up` picks
 the env file by the context (folder) name, while the build context path comes
 from `SERVER_NAME`.
@@ -210,9 +218,11 @@ Why the server holds no compose files:
 - **No sync machinery, no server credentials.** The server never clones
   repos, so it needs no deploy keys to anything; auth flows one way, from
   client to server, and "sync + apply" is one command.
-- **Secrets never rest on the server's disk.** Production env reaches the
-  server only as container environment — no plaintext `.env` files on the
-  VPS or in its backups.
+- **No `.env` files on the server.** Production env reaches the server only
+  as container environment, never as a `.env` file on the VPS or in a
+  checkout there. Docker still stores that environment in the container's
+  config on the server's disk, and `docker inspect` shows it to anyone with
+  Docker access.
 - **Servers are disposable.** A VPS carries only runtime state (volumes);
   everything else is re-creatable by replaying deploys. There is also no
   hubbify footprint on the server to keep updated.

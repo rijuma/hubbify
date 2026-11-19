@@ -96,6 +96,31 @@ this contract out of the box.
              - myapp-api
    ```
 
+## Trust model
+
+This contract holds only for trusted deployers. Labels are a trusted
+channel: the proxy acts on whatever labels a container carries, and nothing
+checks who set them. Anyone who can deploy to a server (start a container
+with labels on it) can therefore:
+
+- claim any domain, including one another project serves;
+- read the proxy's environment through the allowed labels, since
+  `caddy.respond` and `caddy.header.<Name>` expand Caddy placeholders such as
+  `{env.CLOUDFLARE_API_TOKEN}`;
+- read every container's environment with `docker inspect`, through the
+  Docker access their deploy key grants;
+- point `caddy.reverse_proxy` at the socket proxy and read (never write) the
+  Docker API.
+
+The shared `proxy` network has limits of its own. Containers on it reach
+each other directly, bypassing Caddy, so a `caddy.basic_auth` guard at the
+proxy does not protect a service from its neighbours, a neighbour can send
+any `CF-Connecting-IP` value, and generic service names resolve across
+projects (rule 6).
+
+Hosting an untrusted third party needs an operator-owned deploy with a
+per-project ingress network, which hubbify does not provide.
+
 ## Deploy flow
 
 What `just deploy <env>` in a hubbify-template project does with these rules.
@@ -132,7 +157,8 @@ refused, the origin is not Cloudflare-only. On a host with a global IPv6
 address this requires the `proxy` network to have IPv6 enabled, since
 otherwise `just firewall` refuses to apply. On other servers anyone who finds
 the origin IP can send the header with any value, so per-IP rate limits and
-logs keyed on it can be fooled.
+logs keyed on it can be fooled. On every server, a neighbour on the `proxy`
+network can also send it directly (see [Trust model](#trust-model)).
 
 ## Full example
 
