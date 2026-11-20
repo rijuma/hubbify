@@ -110,7 +110,14 @@ with labels on it) can therefore:
 - read every container's environment with `docker inspect`, through the
   Docker access their deploy key grants;
 - point `caddy.reverse_proxy` at the socket proxy and read (never write) the
-  Docker API.
+  Docker API;
+- take over the server: a deploy key's Docker access over SSH is
+  root-equivalent on the host, since it can bind-mount the host filesystem
+  and start privileged containers.
+
+Handing out a deploy key hands out the server. The read-only socket proxy
+limits only what a label can do through Caddy, not what a deployer can do
+with their own Docker access.
 
 The shared `proxy` network has limits of its own. Containers on it reach
 each other directly, bypassing Caddy, so a `caddy.basic_auth` guard at the

@@ -346,8 +346,10 @@ whose network was created without IPv6 needs it recreated:
 ## DNS (planned)
 
 Cloudflare A records are upserted synchronously at deploy time, read from the
-same `caddy` labels the proxy uses. The API token lives on the client/CI only,
-never on the server. Explicit `dns prune` / `dns audit` commands handle
+same `caddy` labels the proxy uses. The upserts run from the client/CI with
+the server's token from `servers/<name>/server.env` and put no further copy
+on the server; that token already sits in the proxy container's env for
+DNS-01 (see [TLS](#tls)). Explicit `dns prune` / `dns audit` commands handle
 cleanup; there is no background watcher (async failures are invisible and
 deletes are unsafe).
 
