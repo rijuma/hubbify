@@ -1,4 +1,4 @@
-FROM caddy:2.11.2-builder@sha256:1ecefa333507828a592aaecc68d5f62a993787057429c04e9b0438a65c980a30 AS builder
+FROM caddy:2.11.9-builder@sha256:f9beaa5ddbe7df6f26ebbcf9cbf44e05a1917b9bba464f0c3229038d7e2e6e13 AS builder
 
 RUN xcaddy build \
     --with github.com/lucaslorentz/caddy-docker-proxy/v2@v2.12.0 \
@@ -13,7 +13,7 @@ FROM scratch AS server
 # Appends that Caddyfile, when there is one, to both bases; each build only
 # runs the base its compose file selects. caddy-docker-proxy doesn't expand
 # `import`, so the blocks must be inline.
-FROM caddy:2.11.2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d AS caddyfiles
+FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0 AS caddyfiles
 COPY Caddyfile Caddyfile.remote /etc/caddy/
 COPY --from=server Caddyfil[e] /tmp/server/
 RUN if [ -f /tmp/server/Caddyfile ]; then \
@@ -23,7 +23,7 @@ RUN if [ -f /tmp/server/Caddyfile ]; then \
         done; \
     fi
 
-FROM caddy:2.11.2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
+FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 
