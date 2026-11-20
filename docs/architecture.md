@@ -109,7 +109,11 @@ and every POST, gets a 403. It publishes no ports and joins only
 join; Caddy reaches it through `DOCKER_HOST=tcp://socket-proxy:2375` and
 keeps routing over `proxy` (`CADDY_INGRESS_NETWORKS=proxy`). The Caddy
 container also drops every Linux capability except `NET_BIND_SERVICE` (to
-bind 80/443) and runs with `no-new-privileges`.
+bind 80/443) and runs with `no-new-privileges`. Dependabot
+(`.github/dependabot.yml`) proposes weekly updates for the pinned
+`socket-proxy` image, the `caddy` base images in `proxy/Dockerfile` and the
+SHA-pinned workflow actions; the plugin versions on the `xcaddy build` line of
+`proxy/Dockerfile` are bumped by hand.
 
 ## TLS
 
