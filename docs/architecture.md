@@ -162,8 +162,9 @@ The network isolates projects from the internet, not from each other; see
 One hubbify checkout manages any number of servers. A server is identified by
 one name used everywhere: the SSH alias in `~/.ssh/config`, the docker
 context, and its folder in this repo. The name uses only lowercase letters,
-digits and hyphens, and starts with a letter or digit; the recipes that turn it
-into a path under `servers/` reject any other name:
+digits and hyphens, starts with a letter or digit, and is not `local`, which is
+reserved for the local proxy; the recipes that turn it into a path under
+`servers/` reject any other name:
 
 ```
 servers/<name>/
@@ -178,7 +179,7 @@ uploads a whole build-context folder to the server's daemon, so pointing it at
 build cache. `CLOUDFLARE_API_TOKEN` in `server.env` is that server's own
 token, limited to the zones it hosts (see TLS). `remote-up` creates the
 folder if it is missing, and `up` does the same for `servers/local/caddy/`,
-so `local` is not available as a server name. `SERVER_NAME` in
+so `local` is a reserved name and the server recipes reject it. `SERVER_NAME` in
 `server.env` must equal the `servers/<name>/` folder name: `remote-up` picks
 the env file by the context (folder) name, while the build context path comes
 from `SERVER_NAME`.

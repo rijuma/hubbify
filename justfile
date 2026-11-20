@@ -167,10 +167,12 @@ firewall server: (_server-name server)
     write_block /etc/ufw/after6.rules "$(rules_block "$ipv6_ranges")"
     ssh {{server}} "sudo ufw reload"
 
-# Reject a server name that is not a plain folder name under servers/
+# Reject a server name that is not a plain folder name under servers/, or is the reserved local
 _server-name name:
     @[[ {{quote(name)}} =~ ^[a-z0-9][a-z0-9-]*$ ]] \
         || { printf 'Invalid server name %s: use lowercase letters, digits and hyphens, starting with a letter or digit\n' {{quote(name)}} >&2; exit 1; }
+    @[[ {{quote(name)}} != local ]] \
+        || { echo 'Server name local is reserved for the local proxy (servers/local/)' >&2; exit 1; }
 
 # Create a server folder from the template, e.g. `just server-create myvps`
 server-create name: (_server-name name)
