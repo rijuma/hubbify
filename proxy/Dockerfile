@@ -1,7 +1,7 @@
 FROM caddy:2.11.9-builder@sha256:f9beaa5ddbe7df6f26ebbcf9cbf44e05a1917b9bba464f0c3229038d7e2e6e13 AS builder
 
 RUN xcaddy build \
-    --with github.com/lucaslorentz/caddy-docker-proxy/v2@v2.12.0 \
+    --with github.com/lucaslorentz/caddy-docker-proxy/v2@v2.13.1 \
     --with github.com/caddy-dns/cloudflare@v0.2.4 \
     --with github.com/WeidiDeng/caddy-cloudflare-ip@f53b62aa13cb7ad79c8b47aacc3f2f03989b67e5
 

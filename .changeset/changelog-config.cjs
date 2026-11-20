@@ -1,4 +1,10 @@
-const { getInfo, getInfoFromPullRequest } = require("@changesets/get-github-info");
+const { getCommitInfo, getPullRequestInfo } = require("@changesets/get-github-info");
+
+const toLinks = (info) => ({
+  commit: info?.commit?.markdownLink ?? null,
+  pull: info?.pull?.markdownLink ?? null,
+  user: info?.author?.markdownLink ?? null,
+});
 
 const GITHUB_SERVER_URL = process.env.GITHUB_SERVER_URL || "https://github.com";
 
@@ -43,10 +49,9 @@ async function getReleaseLine(changeset, _type, options) {
 
   const links = await (async () => {
     if (prFromSummary !== undefined) {
-      let { links } = await getInfoFromPullRequest({
-        repo: options.repo,
-        pull: prFromSummary,
-      });
+      let links = toLinks(
+        await getPullRequestInfo({ repo: options.repo, pull: prFromSummary })
+      );
       if (commitFromSummary) {
         const shortCommitId = commitFromSummary.slice(0, 7);
         links = {
@@ -58,11 +63,9 @@ async function getReleaseLine(changeset, _type, options) {
     }
     const commitToFetchFrom = commitFromSummary || changeset.commit;
     if (commitToFetchFrom) {
-      const { links } = await getInfo({
-        repo: options.repo,
-        commit: commitToFetchFrom,
-      });
-      return links;
+      return toLinks(
+        await getCommitInfo({ repo: options.repo, commit: commitToFetchFrom })
+      );
     }
     return { commit: null, pull: null, user: null };
   })();
@@ -100,11 +103,11 @@ async function getDependencyReleaseLine(changesets, dependenciesUpdated, options
     await Promise.all(
       changesets.map(async (cs) => {
         if (cs.commit) {
-          const { links } = await getInfo({
+          const info = await getCommitInfo({
             repo: options.repo,
             commit: cs.commit,
           });
-          return links.commit;
+          return toLinks(info).commit;
         }
       })
     )
