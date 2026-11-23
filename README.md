@@ -25,7 +25,8 @@ template") — it ships a working app already honoring the
 ## Status
 
 Working: the local and remote proxy stacks with the label-based project
-contract, multi-server management (`servers/<name>/`), deploys over SSH
+contract, multi-server management (`servers/<name>/`, optionally shared
+through a 1Password vault), deploys over SSH
 docker contexts, host maintenance recipes, and the opt-in Cloudflare-only
 firewall. Planned next: server
 bootstrap script, deploy-time Cloudflare DNS sync.

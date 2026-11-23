@@ -173,6 +173,8 @@ servers/<name>/
   server.env            server secrets and settings: CLOUDFLARE_API_TOKEN,
                         ACME_EMAIL, SERVER_NAME, CLOUDFLARE_ONLY (gitignored)
   caddy/Caddyfile       optional per-server Caddyfile (gitignored)
+  source                optional: where the shared copy of the two files above
+                        lives, as op://<vault> (gitignored)
 ```
 
 The `caddy/` subfolder holds only the Caddyfile because the docker build
@@ -190,6 +192,50 @@ Server folders are created with `just server-create <name>`, which copies
 `servers/_template/` (the only tracked entry under `servers/`; everything else
 is gitignored local state), and deleted with `just server-remove <name>` after
 confirmation.
+
+### Shared server config
+
+A server folder is local state, so by default it exists on one person's
+machine. When several people administer the same server, the folder can keep
+its shared copy in a 1Password vault they all read. The folder's `source` file
+names that vault as `op://<vault>`, and the vault holds one document per file,
+titled `<name> server.env` and `<name> Caddyfile`.
+
+| Task                                    | Command                                  |
+| --------------------------------------- | ---------------------------------------- |
+| Publish a server folder the first time  | `just server-push <name> op://<vault>`   |
+| Set the server up on another machine    | `just server-create <name> op://<vault>` |
+| Publish a local change                  | `just server-push <name>`                |
+| Take the shared copy, overwriting local | `just server-pull <name>`                |
+
+- **The vault is the source of truth.** `remote-up`, `remote-logs`, `firewall`
+  and `upgrade` compare the local files with the shared copy first and stop
+  when they differ, naming the files and the two commands above. A stale
+  folder and an unpublished local edit look the same to that check, so it
+  never picks a side on its own.
+- **Editing.** Change the local file, `just server-push <name>`, then run the
+  recipe. Deleting the local Caddyfile and pushing removes its document.
+- **Sign-in.** These recipes need the 1Password CLI (`op`) signed in
+  (`eval $(op signin)`); they stop with that hint otherwise. A session lasts
+  until its terminal closes or sits idle for about 30 minutes. A server folder
+  without a `source` file never calls `op`. To sign in only when the session
+  has expired, add this to `~/.bashrc` and run `hub <recipe>` in place of
+  `just <recipe>`:
+
+  ```bash
+  hub() {
+    op whoami >/dev/null 2>&1 || eval "$(op signin)"
+    just "$@"
+  }
+  ```
+
+- **What the vault gives and what it does not.** Everyone who can read the
+  vault can read the server's Cloudflare token, which is the point. 1Password
+  keeps earlier versions of a document but offers no review or diff, and the
+  last push wins.
+- `op://` is the only source kind there is. `scripts/server-config.sh` does
+  the work, and `scripts/server-config.test.sh` checks it against a stand-in
+  for `op`.
 
 A server folder exists only to install and update hubbify itself (the proxy
 stack) on that server. Beyond the proxy-side site extras in
@@ -368,7 +414,9 @@ proxy can be started on any docker host with the `just` recipes.
 ```
 justfile              task entry points (just --list)
 proxy/                the reverse proxy stack (local + remote overlay)
-servers/<name>/       per-server secrets (server.env) and caddy/Caddyfile
+servers/<name>/       per-server secrets (server.env), caddy/Caddyfile and an
+                      optional source pointing at their shared copy
+scripts/              helper scripts the recipes call
 servers/local/        caddy/Caddyfile for the local proxy (no server.env)
 servers/_template/    tracked skeleton copied by `just server-create`
 docs/                 you are here

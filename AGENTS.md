@@ -34,6 +34,9 @@ disposability, CI parity) are in `docs/architecture.md` → Deploys.
   envs are GitHub environment secrets in each project's own repo; hubbify
   holds no project env or deploy config, only the proxy-side site extras
   that don't fit the allowed labels, in `servers/<name>/caddy/Caddyfile`.
+  A server folder may name a 1Password vault in its `source` file; its
+  recipes then refuse to run while the local files differ from the shared
+  copy there (`docs/architecture.md` → Shared server config).
 
 ## Conventions
 

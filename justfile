@@ -57,7 +57,7 @@ cleanup server:
     ssh {{server}} "df -h /"
 
 # Update a server: install OS updates, then rebuild + redeploy the proxy and refresh its firewall
-upgrade server: (_server-name server)
+upgrade server: (_server-config server)
     #!/usr/bin/env bash
     set -euo pipefail
     ssh {{server}} "sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get -yq upgrade"
@@ -70,7 +70,7 @@ upgrade server: (_server-name server)
     just firewall {{server}}
 
 # Restrict 80/443 to Cloudflare when server.env has CLOUDFLARE_ONLY=true, else lift it
-firewall server: (_server-name server)
+firewall server: (_server-config server)
     #!/usr/bin/env bash
     set -euo pipefail
     cloudflare_only=$(sed -n 's/^CLOUDFLARE_ONLY=//p' servers/{{server}}/server.env | tail -n 1)
@@ -174,14 +174,32 @@ _server-name name:
     @[[ {{quote(name)}} != local ]] \
         || { echo 'Server name local is reserved for the local proxy (servers/local/)' >&2; exit 1; }
 
-# Create a server folder from the template, e.g. `just server-create myvps`
-server-create name: (_server-name name)
+# Stop when a server folder with a `source` file differs from its shared copy
+_server-config name: (_server-name name)
+    @scripts/server-config.sh check {{name}}
+
+# Create a server folder from the template, or from a shared copy: `just server-create myvps op://<vault>`
+server-create name source="": (_server-name name)
     #!/usr/bin/env bash
     set -euo pipefail
     dir="{{justfile_directory()}}/servers/{{name}}"
     [ ! -e "$dir" ] || { echo "servers/{{name}} already exists"; exit 1; }
-    cp -r "{{justfile_directory()}}/servers/_template" "$dir"
-    echo "Created servers/{{name}} — fill in server.env"
+    if [ -z {{quote(source)}} ]; then
+        cp -r "{{justfile_directory()}}/servers/_template" "$dir"
+        echo "Created servers/{{name}} — fill in server.env"
+        exit 0
+    fi
+    mkdir -p "$dir/caddy"
+    scripts/server-config.sh pull {{name}} {{quote(source)}} || { rm -rf "$dir"; exit 1; }
+    echo {{quote(source)}} > "$dir/source"
+
+# Replace a server folder's files with its shared copy
+server-pull name: (_server-name name)
+    @scripts/server-config.sh pull {{name}}
+
+# Publish a server folder's files as its shared copy; give op://<vault> the first time
+server-push name source="": (_server-name name)
+    @scripts/server-config.sh push {{name}} {{quote(source)}}
 
 # Remove a server folder, e.g. `just server-remove myvps`
 [confirm("This deletes the server's secrets and Caddyfile. Continue? (y/N)")]
@@ -191,7 +209,7 @@ server-remove name: (_server-name name)
     rm -rf "{{justfile_directory()}}/servers/{{name}}"
 
 # Build and start the proxy on a server, e.g. `just remote-up myvps`
-remote-up context: (_server-name context)
+remote-up context: (_server-config context)
     version=$(docker --context {{context}} version --format '{{{{.Server.Version}}'); \
         [ "${version%%.*}" -ge 27 ] \
         || { echo "hubbify needs Docker 27+ on the server; {{context}} runs Docker $version" >&2; exit 1; }
@@ -201,5 +219,5 @@ remote-up context: (_server-name context)
     docker --context {{context}} compose --env-file servers/{{context}}/server.env -f proxy/compose.yml -f proxy/compose.remote.yml up -d --build
 
 # Follow proxy logs on a server
-remote-logs context: (_server-name context)
+remote-logs context: (_server-config context)
     docker --context {{context}} compose --env-file servers/{{context}}/server.env -f proxy/compose.yml -f proxy/compose.remote.yml logs -f caddy
