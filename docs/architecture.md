@@ -346,6 +346,14 @@ refuses to edit a rules file whose hubbify block is unterminated or repeated.
 Running it again yields the same files; `upgrade` calls it so Cloudflare's
 ranges stay current.
 
+`ALLOW_INTERFACES` in `server.env` lists network interfaces, comma-separated,
+whose traffic may reach 80/443 beside Cloudflare's, for example `tailscale0`
+for sites that are served only inside a tailnet through DNS-only records. The
+block returns everything arriving on those interfaces before the Cloudflare
+rules. It matches the interface, not a source address, so traffic from the
+public interface cannot pass by forging an address. It has no effect while
+`CLOUDFLARE_ONLY` is off, since nothing is dropped then.
+
 ufw must be active before `just firewall` runs on a `CLOUDFLARE_ONLY` server.
 ufw's own allow/deny rules do not cover the proxy's 80/443: Docker DNATs
 published-port traffic to the container in its own iptables rules, so it is

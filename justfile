@@ -69,7 +69,7 @@ upgrade server: (_server-config server)
     fi
     just firewall {{server}}
 
-# Restrict 80/443 to Cloudflare when server.env has CLOUDFLARE_ONLY=true, else lift it
+# Restrict 80/443 to Cloudflare (and ALLOW_INTERFACES) when server.env has CLOUDFLARE_ONLY=true, else lift it
 firewall server: (_server-config server)
     #!/usr/bin/env bash
     set -euo pipefail
@@ -78,6 +78,9 @@ firewall server: (_server-config server)
         ''|true) ;;
         *) echo "CLOUDFLARE_ONLY must be empty or true (got '$cloudflare_only')" >&2; exit 1 ;;
     esac
+    allow_interfaces=$(sed -n 's/^ALLOW_INTERFACES=//p' servers/{{server}}/server.env | tail -n 1)
+    [[ "$allow_interfaces" =~ ^([a-zA-Z0-9_.-]+(,[a-zA-Z0-9_.-]+)*)?$ ]] \
+        || { echo "ALLOW_INTERFACES must be empty or a comma-separated list of interface names (got '$allow_interfaces')" >&2; exit 1; }
     strip_block='/^# BEGIN hubbify$/,/^# END hubbify$/d'
     # Runs on the server before every strip_block: a BEGIN without its END would make the
     # sed range delete to the end of the rules file $f.
@@ -120,6 +123,9 @@ firewall server: (_server-config server)
         echo '*filter'
         echo ':DOCKER-USER - [0:0]'
         echo '-A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN'
+        for interface in ${allow_interfaces//,/ }; do
+            echo "-A DOCKER-USER -i $interface -j RETURN"
+        done
         for cidr in $1; do
             for proto_port in tcp:80 tcp:443 udp:443; do
                 echo "-A DOCKER-USER -s $cidr -p ${proto_port%:*} -m conntrack --ctorigdstport ${proto_port#*:} -j RETURN"
