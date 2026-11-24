@@ -137,7 +137,8 @@ bind 80/443) and runs with `no-new-privileges`. The pinned
   address. This holds on every remote server.
 - **Cloudflare-only origin (opt-in).** On servers with `CLOUDFLARE_ONLY=true`,
   `just firewall` drops inbound 80/443 (TCP, and UDP 443 for HTTP/3) from
-  anything outside Cloudflare's ranges. The origin IP is closed to everyone
+  anything outside Cloudflare's ranges, and every other published port from
+  anyone. The origin IP is closed to everyone
   but Cloudflare once `just firewall` has completed with the flag set, which
   on a host with a global IPv6 address needs a `proxy` network with IPv6 (see
   Firewall). Closing 80 does not break renewal: DNS-01 needs no
@@ -362,9 +363,12 @@ Docker's `DOCKER-USER` chain, fed from ufw's `after.rules` and `after6.rules`,
 which ufw loads at boot. The block declares `DOCKER-USER` itself, because ufw
 starts before Docker creates the chain, and so each ufw reload resets the
 chain instead of appending duplicates. It returns established/related traffic
-first, then traffic from Cloudflare's ranges, and drops only DNATed
-(published-port) connections whose original destination port is 80 or 443, so
-the containers' own outbound traffic keeps working.
+first, then traffic from Cloudflare's ranges to 80 and 443, and drops every
+other DNATed (published-port) connection, so the containers' own outbound
+traffic keeps working. The drop is not limited to the proxy's ports: Docker
+forwards any published port past ufw, so a container started with a stray
+`-p` would otherwise be open to the internet. Projects publish no host ports
+(see the project contract), so nothing legitimate is lost.
 
 ```mermaid
 flowchart TD
@@ -372,7 +376,7 @@ flowchart TD
     est -->|"yes"| ret["RETURN: Docker's rules continue"]
     est -->|"no"| cfr{"source in Cloudflare ranges<br/>and original port 80/443?"}
     cfr -->|"yes"| ret
-    cfr -->|"no"| dnat{"DNATed to a published<br/>port 80 or 443?"}
+    cfr -->|"no"| dnat{"DNATed to a<br/>published port?"}
     dnat -->|"yes"| drop["DROP"]
     dnat -->|"no: e.g. container outbound"| ret
 ```

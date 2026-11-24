@@ -69,7 +69,7 @@ upgrade server: (_server-config server)
     fi
     just firewall {{server}}
 
-# Restrict 80/443 to Cloudflare (and ALLOW_INTERFACES) when server.env has CLOUDFLARE_ONLY=true, else lift it
+# Restrict published ports to Cloudflare on 80/443 (and ALLOW_INTERFACES) when server.env has CLOUDFLARE_ONLY=true, else lift it
 firewall server: (_server-config server)
     #!/usr/bin/env bash
     set -euo pipefail
@@ -116,8 +116,10 @@ firewall server: (_server-config server)
         echo "$ranges"
     }
 
-    # --ctorigdstport matches the port before DNAT rewrote it; only DNATed (published-port)
-    # traffic is dropped, so the containers' own outbound connections keep working.
+    # --ctorigdstport matches the port before DNAT rewrote it. Only DNATed (published-port)
+    # traffic is dropped, so the containers' own outbound connections keep working. The drop
+    # covers every published port, not just the proxy's: Docker forwards published ports past
+    # ufw, so a stray `-p` on any container would otherwise be open to the internet.
     rules_block() {
         echo '# BEGIN hubbify'
         echo '*filter'
@@ -131,9 +133,7 @@ firewall server: (_server-config server)
                 echo "-A DOCKER-USER -s $cidr -p ${proto_port%:*} -m conntrack --ctorigdstport ${proto_port#*:} -j RETURN"
             done
         done
-        for proto_port in tcp:80 tcp:443 udp:443; do
-            echo "-A DOCKER-USER -p ${proto_port%:*} -m conntrack --ctstate DNAT --ctorigdstport ${proto_port#*:} -j DROP"
-        done
+        echo '-A DOCKER-USER -m conntrack --ctstate DNAT -j DROP'
         echo 'COMMIT'
         echo '# END hubbify'
     }
