@@ -207,6 +207,20 @@ server-pull name: (_server-name name)
 server-push name source="": (_server-name name)
     @scripts/server-config.sh push {{name}} {{quote(source)}}
 
+# Edit a server's server.env in $EDITOR, publish it to its shared copy and apply it with remote-up
+server-edit name: (_server-config name)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    env_file=servers/{{name}}/server.env
+    [ -f "$env_file" ] || { echo "$env_file does not exist; create it with: just server-create {{name}}" >&2; exit 1; }
+    before=$(mktemp)
+    trap 'rm -f "$before"' EXIT
+    cp "$env_file" "$before"
+    ${VISUAL:-${EDITOR:-vi}} "$env_file"
+    if cmp -s "$before" "$env_file"; then echo "No change to $env_file"; exit 0; fi
+    [ ! -f servers/{{name}}/source ] || scripts/server-config.sh push {{name}}
+    {{just_executable()}} remote-up {{name}}
+
 # Remove a server folder, e.g. `just server-remove myvps`
 [confirm("This deletes the server's secrets and Caddyfile. Continue? (y/N)")]
 server-remove name: (_server-name name)

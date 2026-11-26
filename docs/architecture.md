@@ -206,6 +206,7 @@ titled `<name> server.env` and `<name> Caddyfile`.
 | --------------------------------------- | ---------------------------------------- |
 | Publish a server folder the first time  | `just server-push <name> op://<vault>`   |
 | Set the server up on another machine    | `just server-create <name> op://<vault>` |
+| Edit server.env, publish and apply it   | `just server-edit <name>`                |
 | Publish a local change                  | `just server-push <name>`                |
 | Take the shared copy, overwriting local | `just server-pull <name>`                |
 
@@ -214,8 +215,12 @@ titled `<name> server.env` and `<name> Caddyfile`.
   when they differ, naming the files and the two commands above. A stale
   folder and an unpublished local edit look the same to that check, so it
   never picks a side on its own.
-- **Editing.** Change the local file, `just server-push <name>`, then run the
-  recipe. Deleting the local Caddyfile and pushing removes its document.
+- **Editing.** `just server-edit <name>` opens `server.env` in `$VISUAL` or
+  `$EDITOR` and, if it changed, pushes it and runs `remote-up`, so the vault
+  and the running proxy never disagree. Like the other recipes it stops first
+  when the local folder differs from the shared copy. For the Caddyfile,
+  change the local file, `just server-push <name>`, then run the recipe.
+  Deleting the local Caddyfile and pushing removes its document.
 - **Sign-in.** These recipes need the 1Password CLI (`op`) signed in
   (`eval $(op signin)`); they stop with that hint otherwise. A session lasts
   until its terminal closes or sits idle for about 30 minutes. A server folder

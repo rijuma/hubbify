@@ -41,7 +41,21 @@ case "$kind $action" in
 esac
 SH
 chmod +x "$work/bin/op"
-export PATH="$work/bin:$PATH"
+# Stands for the server's Docker daemon: logs each call, answers the version check.
+export DOCKER_STUB_LOG="$work/docker.log"
+cat >"$work/bin/docker" <<'SH'
+#!/usr/bin/env bash
+echo "$*" >>"$DOCKER_STUB_LOG"
+[[ " $* " != *" version "* ]] || echo 27.0.0
+SH
+# Stands for a person editing server.env: appends what EDIT_LINE holds, if anything.
+cat >"$work/bin/edit-stub" <<'SH'
+#!/usr/bin/env bash
+[ -z "${EDIT_LINE:-}" ] || echo "$EDIT_LINE" >>"$1"
+SH
+chmod +x "$work/bin/docker" "$work/bin/edit-stub"
+export PATH="$work/bin:$PATH" EDITOR=edit-stub
+unset VISUAL
 
 ana() { (cd "$work/ana" && just "$@"); }
 ben() { (cd "$work/ben" && just "$@"); }
@@ -111,6 +125,18 @@ check "pull delivers the Caddyfile" bash -c 'cd "$0/ben" && just server-pull myv
 rm "$work/ana/servers/myvps/caddy/Caddyfile"
 check "removing the Caddyfile and pushing removes the document" bash -c 'cd "$0/ana" && just server-push myvps && test ! -e "$1/myvps Caddyfile"' "$work" "$vault"
 check "pull then removes it from the other checkout" bash -c 'cd "$0/ben" && just server-pull myvps && test ! -e servers/myvps/caddy/Caddyfile' "$work"
+
+check "edit without a change succeeds" ana server-edit myvps
+said "and says nothing changed" "No change"
+check "and deploys nothing" test ! -e "$DOCKER_STUB_LOG"
+check "edit with a change publishes it" env EDIT_LINE=ACME_EMAIL=ops@example.com bash -c 'cd "$0/ana" && just server-edit myvps' "$work"
+check "the vault holds the edited file" cmp "$work/ana/servers/myvps/server.env" "$vault/myvps server.env"
+check "and the proxy is redeployed with it" grep -q "compose --env-file servers/myvps/server.env" "$DOCKER_STUB_LOG"
+rm "$DOCKER_STUB_LOG"
+refuses "edit stops when the local copy is stale" env EDIT_LINE=X=1 bash -c 'cd "$0/ben" && just server-edit myvps' "$work"
+said "and names both ways out" "just server-pull myvps" "just server-push myvps"
+check "and neither edits nor deploys" bash -c '! grep -q X=1 "$0/ben/servers/myvps/server.env" && test ! -e "$1"' "$work" "$DOCKER_STUB_LOG"
+check "pull brings the edit to the other checkout" ben server-pull myvps
 
 export OP_STUB_SIGNED_IN=0
 refuses "the check stops when not signed in" ana _server-config myvps
