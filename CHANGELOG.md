@@ -1,5 +1,33 @@
 # hubbify
 
+## 0.2.0
+
+### Minor Changes
+
+- [`722a9cb`](https://github.com/rijuma/hubbify/commit/722a9cbc7d694ffb8d7a5b0a6525dbb774fe1a12) by [@rijuma](https://github.com/rijuma) - `ALLOW_INTERFACES` in `server.env` lists network interfaces whose traffic may
+  reach 80/443 on a `CLOUDFLARE_ONLY` server, for example `tailscale0`. A server
+  can then stay closed to the public while serving DNS-only sites inside a
+  tailnet.
+
+- [`11a2efc`](https://github.com/rijuma/hubbify/commit/11a2efc20a13a0459757bdf9a2ac506ac6581115) by [@rijuma](https://github.com/rijuma) - On a `CLOUDFLARE_ONLY` server, `just firewall` now drops every published port
+  that is not explicitly allowed, not only 80 and 443 from outside Cloudflare.
+  Docker forwards published ports past ufw, so a container started with `-p` on
+  such a server was reachable from the internet. Run `just firewall <name>` to
+  apply it to an existing server.
+
+- [`4a1e191`](https://github.com/rijuma/hubbify/commit/4a1e191e4fcd18c13ecc7ee41389e5c3ec8343af) by [@rijuma](https://github.com/rijuma) - `just server-edit <name>` opens a server's `server.env` in `$VISUAL` or
+  `$EDITOR` and, when it changed, publishes it to the server's 1Password vault
+  (if it has a `source`) and runs `remote-up`, so a rotated token reaches the
+  proxy in one step. It stops before opening the editor when the local folder
+  differs from the shared copy.
+
+- [`bbf25f6`](https://github.com/rijuma/hubbify/commit/bbf25f699f1d132dd1a8379e84ac3d9d0aa39134) by [@rijuma](https://github.com/rijuma) - A server folder can keep a shared copy of its `server.env` and Caddyfile in a
+  1Password vault, named in a `source` file as `op://<vault>`. `just server-push`
+  publishes the local files, `just server-pull` takes the shared ones, and
+  `just server-create <name> op://<vault>` sets a server up from them. `remote-up`,
+  `remote-logs`, `firewall` and `upgrade` stop when the local files differ from the
+  shared copy. Servers without a `source` file are unchanged.
+
 ## 0.1.0
 
 ### Minor Changes
